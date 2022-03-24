@@ -1,7 +1,6 @@
 #include "string.h"
 
 #include "test.h"
-#include "test-macros.h"
 
 TEST(String, CreateValidUTF8) {
   struct String string;

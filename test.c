@@ -1,8 +1,10 @@
 #include "test.h"
 
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -122,12 +124,146 @@ static void run_all_tests() {
   }
 }
 
+static bool test_name_is(const struct Test* test, const char* name) {
+  size_t i = 0, j = 0;
+  while (test->suite_name[i] && name[j]) {
+    if (test->suite_name[i] != name[j]) {
+      return false;
+    }
+    i++;
+    j++;
+  }
+  if (name[j] != '.') {
+    return false;
+  }
+  j++;
+  i = 0;
+  while (test->test_name[i] && name[j]) {
+    if (test->test_name[i] != name[j]) {
+      return false;
+    }
+    i++;
+    j++;
+  }
+  if (test->test_name[i] || name[j]) {
+    return false;
+  } else {
+    return true;
+  }
+}
+
+#if defined(__linux)
+
+// FIXME: This assumes debugger is GDB, and that it is installed. Allow for more debuggers, and
+// handle GDB not being installed.
+static void run_debugger(pid_t test_pid, const struct Test* test) {
+    char pidstr[32], bpstr[256];
+    ASSERT(snprintf(pidstr, sizeof(pidstr), "--pid=%d", test_pid) < sizeof(pidstr));
+    ASSERT(snprintf(bpstr, sizeof(bpstr), "b test_fn_%s_%s", test->suite_name,
+                    test->test_name) < sizeof(bpstr));
+    fprintf(stderr, "Command line: gdb %s -ex '%s' -ex c\n", pidstr, bpstr);
+    if (execlp("gdb", "gdb", pidstr, "-ex", bpstr, "-ex", "c", NULL) < 0) {
+      ERR_FMT("Failed to run GDB: %s\n", strerror(errno));
+    }
+}
+
+#elif defined(__APPLE__)
+
+#include <fcntl.h>
+#include <sys/syslimits.h>
+
+// Writes LLDB commands to a tmpfile and returns the path to the file in pathbuf. Note that this
+// assumes that pathbuf has sufficient space (it should be atleast PATH_MAX bytes).
+static void write_lldb_initial_commands(const struct Test* test, char* pathbuf) {
+  // Get a temporary file and write commands
+  FILE* tmp = tmpfile();
+  if (!tmp) {
+    perror("Couldn't create temporary file");
+    exit(1);
+  }
+  fprintf(tmp, "b test_fn_%s_%s\nc\n", test->suite_name, test->test_name);
+  // Get path to temporary file
+  if (fcntl(fileno(tmp), F_GETPATH, pathbuf) == -1) {
+    perror("Couldn't get path to temporary file");
+    fclose(tmp);
+    exit(1);
+  }
+  // Close temporary file
+  fclose(tmp);
+}
+
+// FIXME: This assumes debugger is LLDB, and that it is installed. Allow for more debuggers, and
+// handle LLDB not being installed.
+static void run_debugger(pid_t test_pid, const struct Test* test) {
+  char pidstr[16], tmppath[PATH_MAX];
+  //write_lldb_initial_commands(test, tmppath);
+  fprintf(stderr, "Debugging test: test_fn_%s_%s\n", test->suite_name, test->test_name);
+  ASSERT(snprintf(pidstr, sizeof(pidstr), "%d", test_pid) < sizeof(pidstr));
+  fprintf(stderr, "Command line: lldb  --attach-pid %s\n", pidstr);
+  if (execlp("lldb", "lldb", "--attach-pid", pidstr, /*"--source", tmppath,*/ NULL) < 0) {
+    ERR_FMT("Failed to run LLDB: %s\n", strerror(errno));
+  }
+}
+
+#endif  // OS-specific run_debugger()
+
+static void debug_test(const struct Test* test) {
+  // Spawn test process
+  pid_t test_pid = fork();
+  if (test_pid < 0) {
+    perror("fork()");
+    exit(1);
+  }
+  if (test_pid == 0) {
+    // Stop this process till debugger attaches
+    kill(getpid(), SIGSTOP);
+    test->test_function();
+    exit(0);
+  }
+  // Spawn debugger process
+  pid_t debug_pid = fork();
+  if (debug_pid < 0) {
+    perror("Couldn't spawn debugger: fork()");
+    // "Continue" the process and wait for it
+    kill(test_pid, SIGCONT);
+    waitpid(test_pid, NULL, 0);
+    exit(1);
+  }
+  if (debug_pid == 0) {
+    // Run debugger in child process
+    run_debugger(test_pid, test);
+    exit(0);
+  }
+  // Wait for the child processes
+  waitpid(debug_pid, NULL, 0);
+  waitpid(test_pid, NULL, 0);
+}
+
+static int debug_this_test(const char* name) {
+  for (size_t i = 0; i < TESTS.num_tests; i++) {
+    if (test_name_is(&TESTS.tests[i], name)) {
+      debug_test(&TESTS.tests[i]);
+      free(TESTS.tests);
+      return 0;
+    }
+  }
+  ERR_FMT("Could not find test: %s\n", name);
+  free(TESTS.tests);
+  return 1;
+}
+
 static void clean_up() {
   free(TESTS.tests);
   free(RUNNING_TESTS.tests);
 }
 
 int main(int argc, char *const *argv) {
+  if (argc == 3) {
+    if (!strcmp(argv[1], "-d")) {
+      const char* test_name = argv[2];
+      return debug_this_test(test_name);
+    }
+  }
   run_all_tests();
   clean_up();
   return 0;

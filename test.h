@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include "test-macros.h"
+
 // Encapsulates information about a single test
 struct Test {
   const char* suite_name;  // Test-suite name
