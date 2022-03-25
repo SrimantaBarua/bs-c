@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "string.h"
 #include "util.h"
 
 #define ERR_FMT(FMT, ...) do {                          \
@@ -32,10 +33,12 @@
     struct Str y = Y;                                                   \
     if (!str_equal(&x, &y)) {                                           \
       ERR_FMT("Assertion failed: %s == %s\n  LHS = ", #X, #Y);          \
-      str_fprint(&x, stderr);                                           \
-      fprintf(stderr, "; RHS = ");                                      \
-      str_fprint(&y, stderr);                                           \
-      fputc('\n', stderr);                                              \
+      struct Writer* writer = (struct Writer*) file_writer_create(stderr); \
+      str_print(&x, writer);                                            \
+      writer->writef(writer, "; RHS = ");                               \
+      str_print(&y, writer);                                            \
+      writer->writef(writer, "\n");                                     \
+      file_writer_free((struct FileWriter*) writer);                    \
       exit(1);                                                          \
     }                                                                   \
   } while (0)

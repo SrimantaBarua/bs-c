@@ -11,7 +11,8 @@ add_library(bs SHARED
   bs.c
   ast.c
   lexer.c
-  string.c)
+  string.c
+  writer.c)
 
 add_executable(bsc bsc.c)
 target_link_libraries(bsc PRIVATE bs)

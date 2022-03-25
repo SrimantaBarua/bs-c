@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "string.h"
+#include "writer.h"
 
 enum BinaryOp {
   BO_Equal,
@@ -356,7 +357,7 @@ struct Ast* ast_ellipsis_create(size_t offset);
 struct Ast* ast_nil_create(size_t offset);
 
 // Print AST recursively
-void ast_print(const struct Ast* ast, size_t indent);
+void ast_print(const struct Ast* ast, struct Writer* writer);
 
 // Free root AST node. This internally figures out which type of node it is, and
 // recursively frees all child nodes.

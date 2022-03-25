@@ -453,6 +453,10 @@ static void ast_nil_free(struct AstNil* ast) {
 
 #undef ALLOC_AST
 
+void ast_print(const struct Ast* ast, struct Writer* writer) {
+  // TODO
+}
+
 void ast_free(struct Ast* ast) {
 #define REDIRECT_FREE(TYPE, NAME) case AST_##TYPE: return ast_##NAME##_free((struct Ast##TYPE *) ast);
 

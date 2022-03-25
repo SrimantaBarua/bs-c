@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "writer.h"
+
 #define codepoint_t uint32_t
 
 // Growable UTF-8 string
@@ -38,7 +40,19 @@ bool str_init(struct Str* str, const char* c_string, size_t length);
 // Check if two string slices are equal. This is O(n) - it checks every byte.
 bool str_equal(const struct Str* a, const struct Str* b);
 
-// Print str out to given FILE*
-int str_fprint(const struct Str* a, FILE* file);
+// Write string out to this writer
+int str_print(const struct Str* a, struct Writer* writer);
+
+// Writer which appends to a struct String
+struct StringWriter {
+  struct Writer writer;
+  struct String* string;
+};
+
+// Allocate a string_writer to write to a String
+struct StringWriter* string_writer_create(struct String* string);
+
+// Free a string_writer. Note: This doesn't free the String it was writing to
+void string_writer_free(struct StringWriter* string_writer);
 
 #endif  // __BS_STRING_H__
