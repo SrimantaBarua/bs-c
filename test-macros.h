@@ -35,7 +35,7 @@
       ERR_FMT("Assertion failed: %s == %s\n  LHS = ", #X, #Y);          \
       struct Writer* writer = (struct Writer*) file_writer_create(stderr); \
       str_print(&x, writer);                                            \
-      writer->writef(writer, "; RHS = ");                               \
+      writer->writef(writer, "\n  RHS = ");                             \
       str_print(&y, writer);                                            \
       writer->writef(writer, "\n");                                     \
       file_writer_free((struct FileWriter*) writer);                    \

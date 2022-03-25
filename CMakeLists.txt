@@ -7,7 +7,7 @@ project(bs VERSION 0.1.0 DESCRIPTION "Barua's Scripting language")
 string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
 add_definitions("-DBS_SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE}")
 
-add_library(bs SHARED
+add_library(bs
   bs.c
   ast.c
   lexer.c

@@ -118,8 +118,7 @@ bool str_equal(const struct Str* a, const struct Str* b) {
 }
 
 int str_print(const struct Str* a, struct Writer* writer) {
-  writer->writef(writer, "%*.s", (int) a->length, (const char*) a->data);
-  return a->length;
+  return writer->writef(writer, "%.*s", (int) a->length, (const char*) a->data);
 }
 
 static int string_writef(struct Writer* writer, const char *fmt, ...) {
@@ -135,7 +134,7 @@ static int string_writef(struct Writer* writer, const char *fmt, ...) {
   if ((ret = vsnprintf(ptr, remaining, fmt, args)) >= remaining) {
     va_end(args);
 
-    string_resize_to_atleast(string, ret);
+    string_resize_to_atleast(string, string->length + ret + 1);
     ptr = (char*) string->data + string->length;
     remaining = (int) (string->capacity - string->length);
 

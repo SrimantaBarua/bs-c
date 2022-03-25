@@ -325,7 +325,7 @@ struct AstNil {
 // Functions to create (allocate) and return different ASTs
 struct Ast* ast_program_create(size_t offset, struct AstVec statements);
 struct Ast* ast_block_create(size_t offset, struct AstVec statements, bool last_had_semicolon);
-struct Ast* ast_struct_create(size_t offset, bool has_parent, struct Str opt_parent, struct Ast* body);
+struct Ast* ast_struct_create(size_t offset, const struct Str* opt_parent, struct Ast* body);
 struct Ast* ast_function_create(size_t offset, struct AstVec parameters, struct Ast* body);
 struct Ast* ast_if_create(size_t offset, struct Ast* condition, struct Ast* body, struct Ast* else_part);
 struct Ast* ast_while_create(size_t offset, struct Ast* condition, struct Ast* body);
@@ -356,8 +356,8 @@ struct Ast* ast_false_create(size_t offset);
 struct Ast* ast_ellipsis_create(size_t offset);
 struct Ast* ast_nil_create(size_t offset);
 
-// Print AST recursively
-void ast_print(const struct Ast* ast, struct Writer* writer);
+// Print AST recursively. Return the number of bytes written, and -1 on error.
+int ast_print(const struct Ast* ast, struct Writer* writer);
 
 // Free root AST node. This internally figures out which type of node it is, and
 // recursively frees all child nodes.
