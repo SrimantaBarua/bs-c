@@ -12,21 +12,20 @@ static struct Token make_token(enum TokenType type, const char* text, size_t off
   return token;
 }
 
-#define ASSERT_NEXT_IS_TOKEN(TYP, TEXT, OFFSET) do {                    \
-    ASSERT(lexer_tok(&lexer, &result));                                 \
-    ASSERT(!result.is_error);                                           \
-    ASSERT(result.token.type == TYP);                                   \
-    ASSERT_INT_EQ(result.token.offset, OFFSET);                         \
-    ASSERT(str_init(&token_str, TEXT, SIZE_MAX));                       \
-    ASSERT_STR_EQ(result.token.text, token_str);                        \
+#define ASSERT_NEXT_IS_TOKEN(TYP, TEXT, OFFSET) do { \
+    ASSERT(lexer_tok(&lexer, &token));               \
+    ASSERT(token.type == TYP);                       \
+    ASSERT_INT_EQ(token.offset, OFFSET);             \
+    ASSERT(str_init(&token_str, TEXT, SIZE_MAX));    \
+    ASSERT_STR_EQ(token.text, token_str);            \
 } while (0)
 
-#define ASSERT_LEXER_AT_END() ASSERT(!lexer_tok(&lexer, &result))
+#define ASSERT_LEXER_AT_END() ASSERT(!lexer_tok(&lexer, &token))
 
 TEST(Lexer, Operators) {
   struct Lexer lexer;
   struct Str token_str;
-  struct TokenOrError result;
+  struct Token token;
   lexer_init(&lexer, ";/= *= <<<=");
   ASSERT_NEXT_IS_TOKEN(TOK_SemiColon, ";", 0);
   ASSERT_NEXT_IS_TOKEN(TOK_DivAssign, "/=", 1);
@@ -39,7 +38,7 @@ TEST(Lexer, Operators) {
 TEST(Lexer, Primitives) {
   struct Lexer lexer;
   struct Str token_str;
-  struct TokenOrError result;
+  struct Token token;
   lexer_init(&lexer, "\"hello\"1.2 3 world");
   ASSERT_NEXT_IS_TOKEN(TOK_String, "hello", 1);
   ASSERT_NEXT_IS_TOKEN(TOK_Float, "1.2", 7);
@@ -51,7 +50,7 @@ TEST(Lexer, Primitives) {
 TEST(Lexer, FibFunction) {
   struct Lexer lexer;
   struct Str token_str;
-  struct TokenOrError result;
+  struct Token token;
   lexer_init(&lexer, "fn fib(n) {\n  if n <= 1 {\n    return 1;\n  } else {\n    "
              "return fib(n - 1) + fib(n - 2);\n  }\n}\n");
   ASSERT_NEXT_IS_TOKEN(TOK_Fn, "fn", 0);

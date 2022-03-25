@@ -137,43 +137,37 @@ static inline size_t tok_len(const struct Lexer* lexer) {
   return lexer->current_offset - lexer->start_offset;
 }
 
-static bool make_invalid_utf8_error(const struct Lexer* lexer, struct TokenOrError* result) {
-  result->is_error = true;
-  result->error.type = LERR_InvalidUtf8;
-  result->error.offset = lexer->start_offset;
-  str_init(&result->error.context, "", 0);
+static bool make_invalid_utf8_error(const struct Lexer* lexer, struct Token* token) {
+  token->type = TOK_Error;
+  token->offset = lexer->start_offset;
+  str_init(&token->text, "invalid UTF-8", SIZE_MAX);
   return true;
 }
 
-static bool make_unexpected_char_error(const struct Lexer* lexer, struct TokenOrError* result) {
-  result->is_error = true;
-  result->error.type = LERR_UnexpectedCharacter;
-  result->error.offset = lexer->start_offset;
-  str_init(&result->error.context, "", 0);
+static bool make_unexpected_char_error(const struct Lexer* lexer, struct Token* token) {
+  token->type = TOK_Error;
+  token->offset = lexer->start_offset;
+  str_init(&token->text, "unexpected character", SIZE_MAX);
   return true;
 }
 
-static bool make_unterminated_string_error(const struct Lexer* lexer, struct TokenOrError* result) {
-  result->is_error = true;
-  result->error.type = LERR_UnexpectedCharacter;
-  result->error.offset = lexer->start_offset;
-  if (!str_init(&result->error.context, tok_start(lexer), tok_len(lexer))) {
-    return make_invalid_utf8_error(lexer, result);
+static bool make_unterminated_string_error(const struct Lexer* lexer, struct Token* token) {
+  token->type = TOK_Error;
+  token->offset = lexer->start_offset;
+  str_init(&token->text, "unterminated string", SIZE_MAX);
+  return true;
+}
+
+static bool make_tok(const struct Lexer* lexer, struct Token* token, enum TokenType type) {
+  token->type = type;
+  token->offset = lexer->start_offset;
+  if (!str_init(&token->text, tok_start(lexer), tok_len(lexer))) {
+    return make_invalid_utf8_error(lexer, token);
   }
   return true;
 }
 
-static bool make_tok(const struct Lexer* lexer, struct TokenOrError* result, enum TokenType type) {
-  result->is_error = false;
-  result->token.type = type;
-  result->token.offset = lexer->start_offset;
-  if (!str_init(&result->token.text, tok_start(lexer), tok_len(lexer))) {
-    return make_invalid_utf8_error(lexer, result);
-  }
-  return true;
-}
-
-static bool string(struct Lexer* lexer, struct TokenOrError* result) {
+static bool string(struct Lexer* lexer, struct Token* token) {
   while (!is_at_end(lexer) && peek(lexer) != '"') {
     char c = advance(lexer);
     if (c == '\\') {
@@ -184,20 +178,19 @@ static bool string(struct Lexer* lexer, struct TokenOrError* result) {
     }
   }
   if (is_at_end(lexer)) {
-    return make_unterminated_string_error(lexer, result);
+    return make_unterminated_string_error(lexer, token);
   }
   advance(lexer);
   // Need to trim off opening and closing quotes, so we can't use `make_tok`
-  result->is_error = false;
-  result->token.type = TOK_String;
-  result->token.offset = lexer->start_offset + 1;
-  if (!str_init(&result->token.text, tok_start(lexer) + 1, tok_len(lexer) - 2)) {
-    return make_invalid_utf8_error(lexer, result);
+  token->type = TOK_String;
+  token->offset = lexer->start_offset + 1;
+  if (!str_init(&token->text, tok_start(lexer) + 1, tok_len(lexer) - 2)) {
+    return make_invalid_utf8_error(lexer, token);
   }
   return true;
 }
 
-static bool number(struct Lexer* lexer, struct TokenOrError* result) {
+static bool number(struct Lexer* lexer, struct Token* token) {
   bool found_point = false;
   while (!is_at_end(lexer)) {
     char c = peek(lexer);
@@ -217,9 +210,9 @@ static bool number(struct Lexer* lexer, struct TokenOrError* result) {
     }
   }
   if (found_point) {
-    return make_tok(lexer, result, TOK_Float);
+    return make_tok(lexer, token, TOK_Float);
   }
-  return make_tok(lexer, result, TOK_Integer);
+  return make_tok(lexer, token, TOK_Integer);
 }
 
 static enum TokenType check_keyword(const struct Lexer* lexer, size_t offset, size_t len,
@@ -305,7 +298,7 @@ static enum TokenType keyword_or_identifier(const struct Lexer* lexer) {
 #undef BYTE
 }
 
-static bool identifier(struct Lexer* lexer, struct TokenOrError* result) {
+static bool identifier(struct Lexer* lexer, struct Token* token) {
   while (!is_at_end(lexer)) {
     char c = peek(lexer);
     if (c == '_' || isalnum(c)) {
@@ -314,15 +307,16 @@ static bool identifier(struct Lexer* lexer, struct TokenOrError* result) {
       break;
     }
   }
-  return make_tok(lexer, result, keyword_or_identifier(lexer));
+  return make_tok(lexer, token, keyword_or_identifier(lexer));
 }
 
-bool lexer_tok(struct Lexer* lexer, struct TokenOrError* result) {
-#define MAKE_TOK(TYP) make_tok(lexer, result, TYP)
+bool lexer_tok(struct Lexer* lexer, struct Token* token) {
+#define MAKE_TOK(TYP) make_tok(lexer, token, TYP)
 #define MATCH(C) match(lexer, C)
 
   skip_whitespace_and_comments(lexer);
   if (is_at_end(lexer)) {
+    make_tok(lexer, token, TOK_EOF);
     return false;
   }
   lexer->start_offset = lexer->current_offset;
@@ -416,15 +410,15 @@ bool lexer_tok(struct Lexer* lexer, struct TokenOrError* result) {
       return MAKE_TOK(TOK_ModAssign);
     }
     return MAKE_TOK(TOK_Percent);
-  case '"': return string(lexer, result);
+  case '"': return string(lexer, token);
   default:
     if (isdigit(c)) {
-      return number(lexer, result);
+      return number(lexer, token);
     }
     if (c == '_' || isalpha(c)) {
-      return identifier(lexer, result);
+      return identifier(lexer, token);
     }
-    return make_unexpected_char_error(lexer, result);
+    return make_unexpected_char_error(lexer, token);
   }
 
 #undef MATCH

@@ -6,12 +6,18 @@
 
 #include "log.h"
 
-static int file_writef(struct Writer* writer, const char *fmt, ...) {
-  struct FileWriter* file_writer = (struct FileWriter*) writer;
+// Default writef just redirects to vwritef
+int DEFAULT_WRITEF(struct Writer* writer, const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  int ret = vfprintf(file_writer->file, fmt, args);
+  int ret = writer->vwritef(writer, fmt, args);
   va_end(args);
+  return ret;
+}
+
+static int file_vwritef(struct Writer* writer, const char *fmt, va_list ap) {
+  struct FileWriter* file_writer = (struct FileWriter*) writer;
+  int ret = vfprintf(file_writer->file, fmt, ap);
   return ret;
 }
 
@@ -25,7 +31,8 @@ struct FileWriter* file_writer_create(FILE* file) {
   if (!writer) {
     DIE_ERR("malloc()");
   }
-  writer->writer.writef = file_writef;
+  writer->writer.writef = DEFAULT_WRITEF;
+  writer->writer.vwritef = file_vwritef;
   writer->writer.flush = file_flush;
   writer->file = file;
   return writer;

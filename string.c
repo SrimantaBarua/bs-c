@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "log.h"
+#include "writer.h"
 
 // Checks if the sequence of bytes provided as argument is valid UTF-8. This
 // assumes that the sequence of bytes is NULL-terminated.
@@ -121,27 +122,22 @@ int str_print(const struct Str* a, struct Writer* writer) {
   return writer->writef(writer, "%.*s", (int) a->length, (const char*) a->data);
 }
 
-static int string_writef(struct Writer* writer, const char *fmt, ...) {
+static int string_vwritef(struct Writer* writer, const char *fmt, va_list ap) {
   struct StringWriter* string_writer = (struct StringWriter*) writer;
   struct String* string = string_writer->string;
   va_list args;
+  va_copy(args, ap);
   char* ptr = (char*) string->data + string->length;
   int remaining = (int) (string->capacity - string->length); // I know, I know...
   int ret;
 
-  va_start(args, fmt);
-
-  if ((ret = vsnprintf(ptr, remaining, fmt, args)) >= remaining) {
-    va_end(args);
-
+  if ((ret = vsnprintf(ptr, remaining, fmt, ap)) >= remaining) {
     string_resize_to_atleast(string, string->length + ret + 1);
     ptr = (char*) string->data + string->length;
     remaining = (int) (string->capacity - string->length);
-
-    va_start(args, fmt);
     ret = vsnprintf(ptr, remaining, fmt, args);
   }
-
+  va_end(ap);
   va_end(args);
 
   // Validate UTF-8
@@ -163,7 +159,8 @@ struct StringWriter* string_writer_create(struct String* string) {
   if (!writer) {
     DIE_ERR("malloc()");
   }
-  writer->writer.writef = string_writef;
+  writer->writer.writef = DEFAULT_WRITEF;
+  writer->writer.vwritef = string_vwritef;
   writer->writer.flush = string_flush;
   writer->string = string;
   return writer;

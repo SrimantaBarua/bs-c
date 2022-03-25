@@ -12,6 +12,7 @@ add_library(bs
   ast.c
   lexer.c
   string.c
+  util.c
   writer.c)
 
 add_executable(bsc bsc.c)
@@ -21,5 +22,6 @@ add_executable(tests
   test.c
   ast-test.c
   lexer-test.c
-  string-test.c)
+  string-test.c
+  util-test.c)
 target_link_libraries(tests PRIVATE bs)

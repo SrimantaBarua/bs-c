@@ -5,19 +5,6 @@
 
 #include "string.h"
 
-enum LexerErrorType {
-  LERR_UnterminatedString,
-  LERR_UnexpectedCharacter,
-  LERR_InvalidUtf8,
-};
-
-// Error encountered by the lexer.
-struct LexerError {
-  size_t offset;            // Byte offset into the input string
-  enum LexerErrorType type; // Type of lexer error
-  struct Str context;       // Additional context (specific to error type)
-};
-
 // The type of token being returned
 enum TokenType {
   // Terminals
@@ -89,6 +76,7 @@ enum TokenType {
   TOK_Percent,          // %
   TOK_ModAssign,        // %=
   // Misc.
+  TOK_Error,
   TOK_EOF,
 };
 
@@ -100,15 +88,6 @@ struct Token {
   enum TokenType type; // Type of token
   struct Str text;     // Slice of input string for the token
   size_t offset;       // Offset into the input string where the token starts
-};
-
-// The result returned by the lexer could either be a token or an error.
-struct TokenOrError {
-  bool is_error; // Set to `true` if this is an error
-  union {
-    struct Token token;
-    struct LexerError error;
-  };
 };
 
 // Pull-based lexer. Call `lexer_tok` to advance
@@ -124,6 +103,6 @@ void lexer_init(struct Lexer* lexer, const char* source);
 
 // Get the next token (or error) from the lexer. Returns `false` if we're at
 // EOF, otherwise returns `true` regardless of token or error.
-bool lexer_tok(struct Lexer* lexer, struct TokenOrError* result);
+bool lexer_tok(struct Lexer* lexer, struct Token* token);
 
 #endif  // __BS_LEXER_H__
