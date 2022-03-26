@@ -11,6 +11,7 @@ add_library(bs
   bs.c
   ast.c
   lexer.c
+  parser.c
   string.c
   util.c
   writer.c)
