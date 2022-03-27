@@ -771,7 +771,7 @@ int ast_print(const struct Ast* ast, struct Writer* writer) {
   REDIRECT_PRINT(False, false)
   REDIRECT_PRINT(Ellipsis, ellipsis)
   REDIRECT_PRINT(Nil, nil)
-  default: DIE("%s", "Unreachable");
+  default: UNREACHABLE();
   };
 
 #undef REDIRECT_PRINT
@@ -817,6 +817,7 @@ void ast_free(struct Ast* ast) {
   REDIRECT_FREE(False, false)
   REDIRECT_FREE(Ellipsis, ellipsis)
   REDIRECT_FREE(Nil, nil)
+  default: UNREACHABLE();
   };
 
 #undef REDIRECT_FREE

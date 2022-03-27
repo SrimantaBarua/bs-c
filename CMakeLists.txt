@@ -23,6 +23,7 @@ add_executable(tests
   test.c
   ast-test.c
   lexer-test.c
+  parser-test.c
   string-test.c
   util-test.c)
 target_link_libraries(tests PRIVATE bs)

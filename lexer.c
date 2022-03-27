@@ -75,6 +75,7 @@ const char* token_type_to_string(enum TokenType token_type) {
   case TOK_DivAssign:        return "/=";
   case TOK_Percent:          return "%";
   case TOK_ModAssign:        return "%=";
+  case TOK_Error:            return "Error";
   case TOK_EOF:              return "EOF";
   }
 }

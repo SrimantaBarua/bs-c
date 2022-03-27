@@ -20,14 +20,6 @@ struct Parser {
   bool incomplete_input; // Whether the error was because we had incomplete input
 };
 
-// Initialize the parser
-static void parser_init(struct Parser* parser, const char* source, struct Writer* writer) {
-  lexer_init(&parser->lexer, source);
-  parser->writer = writer;
-  parser->had_error = false;
-  parser->panic_mode = false;
-}
-
 // Prints error messages to the parsers "writer", and indicates that we've
 // encountered an error.
 static void error_at(struct Parser* parser, const struct Token* token, const char *msg, va_list ap) {
@@ -78,18 +70,45 @@ static void advance(struct Parser* parser) {
 }
 
 // Checks if the next token's type is `type`. If yes, advances the parser.
-static void consume(struct Parser* parser, enum TokenType type) {
+// Otherwise just returns false.
+static bool match(struct Parser* parser, enum TokenType type) {
   if (parser->current.type == type) {
     advance(parser);
-  } else {
+    return true;
+  }
+  return false;
+}
+
+// Checks if the next token's type is `type`. If yes, advances the parser.
+// Otherwise trigers an error.
+static void consume(struct Parser* parser, enum TokenType type) {
+  if (!match(parser, type)) {
     error_at_current(parser, "expected %s, found ", token_type_to_string(type));
   }
 }
 
-// Forward declaration
+// Forward declarations
 static struct Ast* expression(struct Parser* parser);
+static struct Ast* statement_list(struct Parser* parser, bool inside_block);
+static struct Ast* block_statement(struct Parser* parser);
 
 static void expressions(struct Parser* parser, struct AstVec* vec, enum TokenType terminator) {
+  if (match(parser, terminator)) {
+    return;
+  }
+  while (true) {
+    switch (parser->current.type) {
+    case TOK_EOF:
+      parser->incomplete_input = true;
+      return;
+    default:
+      ast_vec_push(vec, expression(parser));
+      if (match(parser, terminator)) {
+        return;
+      }
+      consume(parser, TOK_Comma);
+    }
+  }
 }
 
 static struct Ast* integer(struct Parser* parser) {
@@ -118,6 +137,133 @@ static struct Ast* float_node(struct Parser* parser) {
   return ast_float_create(parser->previous.offset, value);
 }
 
+static void parameters(struct Parser* parser, struct AstVec* vec, enum TokenType terminator,
+                       bool can_have_self) {
+  if (match(parser, terminator)) {
+    return;
+  }
+  if (can_have_self) {
+    if (match(parser, TOK_Self)) {
+      ast_vec_push(vec, ast_self_create(parser->previous.offset));
+      if (match(parser, terminator)) {
+        return;
+      } else {
+        consume(parser, TOK_Comma);
+      }
+    }
+  }
+  while (true) {
+    switch (parser->current.type) {
+    case TOK_EOF:
+      parser->incomplete_input = true;
+      return;
+    case TOK_Identifier:
+      ast_vec_push(vec, ast_identifier_create(parser->current.offset, parser->current.text));
+      advance(parser);
+      if (match(parser, terminator)) {
+        return;
+      } else {
+        consume(parser, TOK_Comma);
+      }
+      break;
+    case TOK_Ellipsis:
+      ast_vec_push(vec, ast_ellipsis_create(parser->current.offset));
+      advance(parser);
+      if (!match(parser, terminator)) {
+        error_at_current(parser, "expected %s after '...', found: ",
+                         token_type_to_string(terminator));
+      } else {
+        return;
+      }
+    default:
+      error_at_current(parser, "expected identifier or '...', found: ");
+      return;
+    }
+  }
+}
+
+static struct Ast* lambda(struct Parser* parser) {
+  struct AstVec params;
+  ast_vec_init(&params);
+  size_t offset = parser->current.offset;
+  consume(parser, TOK_LeftParen);
+  parameters(parser, &params, TOK_RightParen, false);
+  struct Ast* body = block_statement(parser);
+  return ast_function_create(offset, params, body);
+}
+
+static struct Ast* array(struct Parser* parser) {
+  struct AstVec elements;
+  size_t offset = parser->previous.offset;
+  ast_vec_init(&elements);
+  expressions(parser, &elements, TOK_RightSqBr);
+  return ast_array_create(offset, elements);
+}
+
+static struct Ast* dictionary_or_set(struct Parser* parser) {
+  struct AstPairVec kvpairs;
+  struct AstVec elements;
+  ast_pair_vec_init(&kvpairs);
+  ast_vec_init(&elements);
+  size_t offset = parser->previous.offset;
+  if (match(parser, TOK_RightCurBr)) {
+    return ast_dictionary_create(offset, kvpairs);
+  }
+  struct Ast* key = expression(parser);
+  if (match(parser, TOK_Colon)) {
+    struct Ast* value = expression(parser);
+    ast_pair_vec_push(&kvpairs, key, value);
+    while (!match(parser, TOK_RightCurBr)) {
+      consume(parser, TOK_Comma);
+      key = expression(parser);
+      consume(parser, TOK_Colon);
+      value = expression(parser);
+      ast_pair_vec_push(&kvpairs, key, value);
+    }
+    return ast_dictionary_create(offset, kvpairs);
+  } else {
+    ast_vec_push(&elements, key);
+    while (!match(parser, TOK_RightCurBr)) {
+      consume(parser, TOK_Comma);
+      ast_vec_push(&elements, expression(parser));
+    }
+    return ast_set_create(offset, elements);
+  }
+}
+
+static struct Ast* require(struct Parser* parser) {
+  size_t offset = parser->previous.offset;
+  consume(parser, TOK_LeftParen);
+  consume(parser, TOK_String);
+  struct Str module = parser->previous.text;
+  consume(parser, TOK_RightParen);
+  return ast_require_create(offset, module);
+}
+
+static struct Ast* yield(struct Parser* parser) {
+  size_t offset = parser->previous.offset;
+  consume(parser, TOK_LeftParen);
+  struct Ast* value = expression(parser);
+  consume(parser, TOK_RightParen);
+  return ast_yield_create(offset, value);
+}
+
+static struct Ast* if_statement_suffix(struct Parser* parser) {
+  size_t offset = parser->previous.offset;
+  struct Ast* condition = expression(parser);
+  struct Ast* body = block_statement(parser);
+  struct Ast* else_part = NULL;
+  if (match(parser, TOK_Else)) {
+    else_part = block_statement(parser);
+  }
+  return ast_if_create(offset, condition, body, else_part);
+}
+
+static struct Ast* if_statement(struct Parser* parser) {
+  consume(parser, TOK_If);
+  return if_statement_suffix(parser);
+}
+
 static struct Ast* atom(struct Parser* parser) {
   struct Ast* ast;
   size_t offset = parser->current.offset;
@@ -132,17 +278,17 @@ static struct Ast* atom(struct Parser* parser) {
   case TOK_String:     return ast_string_create(offset, parser->previous.text);
   case TOK_Self:       return ast_self_create(offset);
   case TOK_Varargs:    return ast_varargs_create(offset);
-  // TODO case TOK_If:         return if_statement_suffix(parser);
-  // TODO case TOK_Require:    return require(parser);
-  // TODO case TOK_Yield:      return yield(parser);
+  case TOK_If:         return if_statement_suffix(parser);
+  case TOK_Require:    return require(parser);
+  case TOK_Yield:      return yield(parser);
   case TOK_LeftParen:
     advance(parser);
     ast = expression(parser);
     consume(parser, TOK_RightParen);
     return ast;
-  // TODO case TOK_Fn:         return lambda(parser);
-  // TODO case TOK_LeftSqBr:   return array(parser);
-  // TODO case TOK_LeftCurBr:  return dictionary_or_set(parser);
+  case TOK_Fn:         return lambda(parser);
+  case TOK_LeftSqBr:   return array(parser);
+  case TOK_LeftCurBr:  return dictionary_or_set(parser);
   case TOK_EOF:
     parser->incomplete_input = true;
     return NULL;
@@ -157,6 +303,7 @@ static struct Ast* primary(struct Parser* parser) {
   struct Ast *ret, *index;
   struct AstVec arguments;
   ret = atom(parser);
+  ast_vec_init(&arguments);
   while (true) {
     offset = parser->current.offset;
     switch (parser->current.type) {
@@ -167,7 +314,6 @@ static struct Ast* primary(struct Parser* parser) {
       break;
     case TOK_LeftParen:
       advance(parser);
-      ast_vec_init(&arguments);
       expressions(parser, &arguments, TOK_RightParen);
       ret = ast_call_create(offset, ret, arguments);
       break;
@@ -204,10 +350,10 @@ static struct Ast* unary(struct Parser* parser, struct Ast* opt_primary) {
 }
 
 static struct Ast* term(struct Parser* parser, struct Ast* opt_primary) {
-  size_t offset = opt_primary ? opt_primary->offset : parser->current.offset;
   struct Ast* ret = unary(parser, opt_primary);
   while (true) {
     enum BinaryOp operation;
+    size_t offset = parser->current.offset;
     switch (parser->current.type) {
     case TOK_Star:    operation = BO_Multiply; break;
     case TOK_Slash:   operation = BO_Divide; break;
@@ -222,10 +368,10 @@ static struct Ast* term(struct Parser* parser, struct Ast* opt_primary) {
 }
 
 static struct Ast* sum(struct Parser* parser, struct Ast* opt_primary) {
-  size_t offset = opt_primary ? opt_primary->offset : parser->current.offset;
   struct Ast* ret = term(parser, opt_primary);
   while (true) {
     enum BinaryOp operation;
+    size_t offset = parser->current.offset;
     switch (parser->current.type) {
     case TOK_Plus:  operation = BO_Add; break;
     case TOK_Minus: operation = BO_Subtract; break;
@@ -239,10 +385,10 @@ static struct Ast* sum(struct Parser* parser, struct Ast* opt_primary) {
 }
 
 static struct Ast* shift_expression(struct Parser* parser, struct Ast* opt_primary) {
-  size_t offset = opt_primary ? opt_primary->offset : parser->current.offset;
   struct Ast* ret = sum(parser, opt_primary);
   while (true) {
     enum BinaryOp operation;
+    size_t offset = parser->current.offset;
     switch (parser->current.type) {
     case TOK_ShiftLeft:  operation = BO_ShiftLeft; break;
     case TOK_ShiftRight: operation = BO_ShiftRight; break;
@@ -256,13 +402,12 @@ static struct Ast* shift_expression(struct Parser* parser, struct Ast* opt_prima
 }
 
 static struct Ast* bitwise_and(struct Parser* parser, struct Ast* opt_primary) {
-  size_t offset = opt_primary ? opt_primary->offset : parser->current.offset;
   struct Ast* ret = shift_expression(parser, opt_primary);
   while (true) {
-    if (parser->current.type != TOK_BitAnd) {
+    if (!match(parser, TOK_BitAnd)) {
       return ret;
     }
-    advance(parser);
+    size_t offset = parser->previous.offset;
     struct Ast* rhs = shift_expression(parser, NULL);
     ret = ast_binary_create(offset, BO_BitAnd, ret, rhs);
   }
@@ -270,13 +415,12 @@ static struct Ast* bitwise_and(struct Parser* parser, struct Ast* opt_primary) {
 }
 
 static struct Ast* bitwise_xor(struct Parser* parser, struct Ast* opt_primary) {
-  size_t offset = opt_primary ? opt_primary->offset : parser->current.offset;
   struct Ast* ret = bitwise_and(parser, opt_primary);
   while (true) {
-    if (parser->current.type != TOK_BitXor) {
+    if (!match(parser, TOK_BitXor)) {
       return ret;
     }
-    advance(parser);
+    size_t offset = parser->previous.offset;
     struct Ast* rhs = bitwise_and(parser, NULL);
     ret = ast_binary_create(offset, BO_BitXor, ret, rhs);
   }
@@ -284,13 +428,12 @@ static struct Ast* bitwise_xor(struct Parser* parser, struct Ast* opt_primary) {
 }
 
 static struct Ast* bitwise_or(struct Parser* parser, struct Ast* opt_primary) {
-  size_t offset = opt_primary ? opt_primary->offset : parser->current.offset;
   struct Ast* ret = bitwise_xor(parser, opt_primary);
   while (true) {
-    if (parser->current.type != TOK_BitOr) {
+    if (!match(parser, TOK_BitOr)) {
       return ret;
     }
-    advance(parser);
+    size_t offset = parser->previous.offset;
     struct Ast* rhs = bitwise_xor(parser, NULL);
     ret = ast_binary_create(offset, BO_BitOr, ret, rhs);
   }
@@ -298,7 +441,6 @@ static struct Ast* bitwise_or(struct Parser* parser, struct Ast* opt_primary) {
 }
 
 static struct Ast* comparison(struct Parser* parser, struct Ast* opt_primary) {
-  size_t offset = opt_primary ? opt_primary->offset : parser->current.offset;
   struct Ast* ret = bitwise_or(parser, opt_primary);
   while (true) {
     enum BinaryOp operation;
@@ -311,6 +453,7 @@ static struct Ast* comparison(struct Parser* parser, struct Ast* opt_primary) {
     case TOK_GreaterThan:  operation = BO_GreaterThan; break;
     default:               return ret;
     }
+    size_t offset = parser->current.offset;
     advance(parser);
     struct Ast* rhs = bitwise_or(parser, NULL);
     ret = ast_binary_create(offset, operation, ret, rhs);
@@ -336,13 +479,12 @@ static struct Ast* inversion(struct Parser* parser, struct Ast* opt_primary) {
 }
 
 static struct Ast* conjunction(struct Parser* parser, struct Ast* opt_primary) {
-  size_t offset = opt_primary ? opt_primary->offset : parser->current.offset;
   struct Ast* ret = inversion(parser, opt_primary);
   while (true) {
-    if (parser->current.type != TOK_And) {
+    if (!match(parser, TOK_And)) {
       break;
     }
-    advance(parser);
+    size_t offset = parser->previous.offset;
     struct Ast* rhs = inversion(parser, NULL);
     ret = ast_binary_create(offset, BO_LogicalAnd, ret, rhs);
   }
@@ -350,46 +492,169 @@ static struct Ast* conjunction(struct Parser* parser, struct Ast* opt_primary) {
 }
 
 static struct Ast* disjunction(struct Parser* parser, struct Ast* opt_primary) {
-  size_t offset = opt_primary ? opt_primary->offset : parser->current.offset;
   struct Ast* ret = conjunction(parser, opt_primary);
   while (true) {
-    if (parser->current.type != TOK_Or) {
+    if (!match(parser, TOK_Or)) {
       break;
     }
-    advance(parser);
+    size_t offset = parser->previous.offset;
     struct Ast* rhs = conjunction(parser, NULL);
     ret = ast_binary_create(offset, BO_LogicalOr, ret, rhs);
   }
   return ret;
 }
 
+static struct Ast* expression_prime(struct Parser* parser, struct Ast* primary) {
+  return disjunction(parser, primary);
+}
+
 static struct Ast* expression(struct Parser* parser) {
   return disjunction(parser, NULL);
 }
 
+static bool is_assignment_op(enum TokenType type) {
+  switch (type) {
+  case TOK_Assign:
+  case TOK_AddAssign:
+  case TOK_SubAssign:
+  case TOK_MulAssign:
+  case TOK_DivAssign:
+  case TOK_ModAssign:
+  case TOK_ShiftLeftAssign:
+  case TOK_ShiftRightAssign:
+  case TOK_BitOrAssign:
+  case TOK_BitXorAssign:
+  case TOK_BitAndAssign:
+    return true;
+  default:
+    return false;
+  }
+}
+
 static struct Ast* assignment_or_expression(struct Parser* parser) {
-  // TODO
-  return expression(parser);
+  switch (parser->current.type) {
+  case TOK_Identifier:
+  case TOK_Self: {
+    struct Ast* lhs = primary(parser);
+    if (!is_assignment_op(parser->current.type)) {
+      return expression_prime(parser, lhs);
+    }
+    size_t offset = parser->current.offset;
+    enum TokenType token_type = parser->current.type;
+    advance(parser);
+    struct Ast* rhs = expression(parser);
+    switch (token_type) {
+    case TOK_AddAssign:        rhs = ast_binary_create(offset, BO_Add, lhs, rhs); break;
+    case TOK_SubAssign:        rhs = ast_binary_create(offset, BO_Subtract, lhs, rhs); break;
+    case TOK_MulAssign:        rhs = ast_binary_create(offset, BO_Multiply, lhs, rhs); break;
+    case TOK_DivAssign:        rhs = ast_binary_create(offset, BO_Divide, lhs, rhs); break;
+    case TOK_ModAssign:        rhs = ast_binary_create(offset, BO_Modulo, lhs, rhs); break;
+    case TOK_ShiftLeftAssign:  rhs = ast_binary_create(offset, BO_ShiftLeft, lhs, rhs); break;
+    case TOK_ShiftRightAssign: rhs = ast_binary_create(offset, BO_ShiftRight, lhs, rhs); break;
+    case TOK_BitOrAssign:      rhs = ast_binary_create(offset, BO_BitOr, lhs, rhs); break;
+    case TOK_BitXorAssign:     rhs = ast_binary_create(offset, BO_BitXor, lhs, rhs); break;
+    case TOK_BitAndAssign:     rhs = ast_binary_create(offset, BO_BitAnd, lhs, rhs); break;
+    case TOK_Assign:           break;
+    default:
+      UNREACHABLE();
+    }
+    return ast_assignment_create(offset, lhs, rhs);
+  }
+  default:
+    return expression(parser);
+  }
 }
 
 static struct Ast* let_declaration(struct Parser* parser, bool public) {
-  DIE("%s", "Unimplemented");
+  size_t offset = parser->current.offset;
+  consume(parser, TOK_Let);
+  consume(parser, TOK_Identifier);
+  struct Str variable = parser->previous.text;
+  struct Ast* rhs = NULL;
+  if (match(parser, TOK_Assign)) {
+    rhs = expression(parser);
+  } else {
+    rhs = ast_nil_create(offset);
+  };
+  return ast_let_create(offset, public, variable, rhs);
+}
+
+static struct Ast* function_declaration(struct Parser* parser, bool public, bool can_have_self) {
+  struct AstVec params;
+  ast_vec_init(&params);
+  size_t offset = parser->current.offset;
+  consume(parser, TOK_Fn);
+  consume(parser, TOK_Identifier);
+  struct Str name = parser->previous.text;
+  consume(parser, TOK_LeftParen);
+  parameters(parser, &params, TOK_RightParen, can_have_self);
+  struct Ast* body = block_statement(parser);
+  struct Ast* ast_function = ast_function_create(offset, params, body);
+  return ast_let_create(offset, public, name, ast_function);
+}
+
+static struct Ast* struct_declaration(struct Parser* parser, bool public) {
+  struct AstVec members;
+  ast_vec_init(&members);
+  size_t offset = parser->current.offset;
+  consume(parser, TOK_Struct);
+  consume(parser, TOK_Identifier);
+  struct Str name = parser->previous.text;
+  struct Str parent;
+  bool has_parent = false;
+  if (match(parser, TOK_Colon)) {
+    consume(parser, TOK_Identifier);
+    parent = parser->previous.text;
+    has_parent = true;
+  }
+  consume(parser, TOK_LeftCurBr);
+  size_t body_offset = parser->current.offset;
+  while (!match(parser, TOK_RightCurBr)) {
+    bool public = match(parser, TOK_Pub);
+    ast_vec_push(&members, function_declaration(parser, public, true));
+  }
+  struct Ast* ast_struct = ast_struct_create(offset,
+                                             has_parent ? &parent : NULL,
+                                             ast_block_create(body_offset, members, true));
+  return ast_let_create(offset, public, name, ast_struct);
 }
 
 static struct Ast* declaration(struct Parser* parser, bool public) {
-  DIE("%s", "Unimplemented");
+  switch (parser->current.type) {
+  case TOK_Fn:     return function_declaration(parser, public, false);
+  case TOK_Struct: return struct_declaration(parser, public);
+  case TOK_Let:    return let_declaration(parser, public);
+  case TOK_EOF:
+    parser->incomplete_input = true;
+    return NULL;
+  default:
+    error_at_current(parser, "expected fn, struct, or let, found ",
+                     token_type_to_string(parser->current.type));
+    return NULL;
+  }
+}
+
+static struct Ast* block_statement(struct Parser* parser) {
+  return statement_list(parser, true);
 }
 
 static struct Ast* for_statement(struct Parser* parser) {
-  DIE("%s", "Unimplemented");
+  size_t offset = parser->previous.offset;
+  consume(parser, TOK_For);
+  consume(parser, TOK_Identifier);
+  struct Str identifier = parser->previous.text;
+  consume(parser, TOK_In);
+  struct Ast* generator = expression(parser);
+  struct Ast* body = block_statement(parser);
+  return ast_for_create(offset, identifier, generator, body);
 }
 
 static struct Ast* while_statement(struct Parser* parser) {
-  DIE("%s", "Unimplemented");
-}
-
-static struct Ast* if_statement(struct Parser* parser) {
-  DIE("%s", "Unimplemented");
+  size_t offset = parser->previous.offset;
+  consume(parser, TOK_While);
+  struct Ast* condition = expression(parser);
+  struct Ast* body = block_statement(parser);
+  return ast_while_create(offset, condition, body);
 }
 
 static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
@@ -447,9 +712,7 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
       is_semicolon_statement = true;
     }
     if (is_semicolon_statement) {
-      if (parser->current.type == TOK_SemiColon) {
-        consume(parser, TOK_SemiColon);
-      } else {
+      if (!match(parser, TOK_SemiColon)) {
         is_semicolon_statement = false;
         break;
       }
@@ -463,10 +726,18 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
   }
 }
 
+// Initialize the parser
+static void parser_init(struct Parser* parser, const char* source, struct Writer* writer) {
+  lexer_init(&parser->lexer, source);
+  advance(parser); // Jump-start parsing
+  parser->writer = writer;
+  parser->had_error = false;
+  parser->panic_mode = false;
+}
+
 struct Ast* parse(const char* source, struct Writer *err_writer, bool* incomplete_input) {
   struct Parser parser;
   parser_init(&parser, source, err_writer);
-  advance(&parser); // Jump-start parsing
   struct Ast* ast = statement_list(&parser, false);
   *incomplete_input = !parser.had_error && parser.incomplete_input;
   // If an error was encountered, free the AST and return NULL
