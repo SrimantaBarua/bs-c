@@ -67,7 +67,8 @@ static void run_test(const struct Test* test) {
     running_test.pid = pid;
     running_test.stderr_fd = fds[0];
     RUNNING_TESTS.num_tests++;
-    RUNNING_TESTS.tests = realloc(RUNNING_TESTS.tests, RUNNING_TESTS.num_tests);
+    RUNNING_TESTS.tests = realloc(RUNNING_TESTS.tests,
+                                  RUNNING_TESTS.num_tests * sizeof(struct RunningTest));
     RUNNING_TESTS.tests[RUNNING_TESTS.num_tests - 1] = running_test;
   }
 }
