@@ -37,6 +37,8 @@ static void error_at(struct Parser* parser, const struct Token* token, const cha
                            line.line_number, line.range_start, line.start,
                            line.range_end - line.range_start, line.start + line.range_start,
                            line.length - line.range_end, line.start + line.range_end);
+  } else {
+    parser->writer->writef(parser->writer, "\n");
   }
   parser->had_error = true;
   parser->panic_mode = true;
@@ -715,11 +717,11 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
     consume(parser, TOK_LeftCurBr);
   }
   ast_vec_init(&statements);
-  while (true) {
+  while (parser->current.type != TOK_EOF) {
     if (inside_block && parser->current.type == TOK_RightCurBr) {
       break;
     }
-    is_semicolon_statement = true;
+    is_semicolon_statement = false;
     offset = parser->current.offset;
     switch (parser->current.type) {
     case TOK_EOF:
@@ -736,7 +738,7 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
     case TOK_For:    ast_vec_push(&statements, for_statement(parser)); break;
     case TOK_Let:
       ast_vec_push(&statements, let_declaration(parser, false));
-      is_semicolon_statement = false;
+      is_semicolon_statement = true;
       break;
     case TOK_Break:
       advance(parser);
@@ -750,10 +752,14 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
       break;
     case TOK_Return:
       advance(parser);
-      if (parser->current.type == TOK_SemiColon) {
+      switch (parser->current.type) {
+      case TOK_SemiColon:
+      case TOK_RightCurBr:
         ast_vec_push(&statements, ast_return_create(offset, NULL));
-      } else {
+        break;
+      default:
         ast_vec_push(&statements, ast_return_create(offset, expression(parser)));
+        break;
       }
       is_semicolon_statement = true;
       break;

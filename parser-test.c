@@ -76,3 +76,16 @@ TEST(Parser, SetDictArr) {
   E2E_TEST("a ^= b; c /= d; e <<= f; g >>= h;",
            "(program (= a (^ a b)) (= c (/ c d)) (= e (<< e f)) (= g (>> g h)))");
 }
+
+TEST(Parser, Return) {
+  E2E_TEST("fn f1() { return; } fn f2() { return 1; } fn f3() { return } fn f4() { return 1 }",
+           "(program (let f1 <private> (fn (params) (block <noret> (return)))) "
+           "(let f2 <private> (fn (params) (block <noret> (return 1)))) "
+           "(let f3 <private> (fn (params) (block <ret> (return)))) "
+           "(let f4 <private> (fn (params) (block <ret> (return 1)))))");
+}
+
+TEST_FAIL(Parser, MissedSemicolon) {
+  E2E_TEST("fn f1() { let a = 2\nreturn a; }",
+           "(program (let f1 <private> (fn (params) (block <noret> (let a <private> 2) (return a)))))");
+}
