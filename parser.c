@@ -676,6 +676,37 @@ static struct Ast* while_statement(struct Parser* parser) {
   return ast_while_create(offset, condition, body);
 }
 
+static void synchronize(struct Parser* parser) {
+  parser->panic_mode = false;
+  while (parser->current.type != TOK_EOF) {
+    // Check if the previous token was a good synchronization point
+    switch (parser->previous.type) {
+    case TOK_SemiColon:
+    case TOK_RightCurBr:
+      return;
+    default:
+      break;
+    }
+    // Check the current token for a good synchronization point
+    switch (parser->current.type) {
+    case TOK_Fn:
+    case TOK_Pub:
+    case TOK_Let:
+    case TOK_For:
+    case TOK_If:
+    case TOK_While:
+    case TOK_Struct:
+    case TOK_Break:
+    case TOK_Continue:
+    case TOK_Return:
+      return;
+    default:
+      break;
+    }
+    advance(parser);
+  }
+}
+
 static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
   struct AstVec statements;
   bool is_semicolon_statement = false;
@@ -720,9 +751,9 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
     case TOK_Return:
       advance(parser);
       if (parser->current.type == TOK_SemiColon) {
-        ast_vec_push(&statements, ast_return_create(offset, expression(parser)));
-      } else {
         ast_vec_push(&statements, ast_return_create(offset, NULL));
+      } else {
+        ast_vec_push(&statements, ast_return_create(offset, expression(parser)));
       }
       is_semicolon_statement = true;
       break;
@@ -730,7 +761,11 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
       ast_vec_push(&statements, assignment_or_expression(parser));
       is_semicolon_statement = true;
     }
-    if (is_semicolon_statement) {
+    // Error synchronization
+    if (parser->panic_mode) {
+      synchronize(parser);
+    } else if (is_semicolon_statement) {
+      // Otherwise if everything went okay, try to match a semicolon
       if (!match(parser, TOK_SemiColon)) {
         is_semicolon_statement = false;
         break;
