@@ -85,7 +85,9 @@ bool string_init(struct String* string, const char* c_string) {
   if (!validate_null_terminated_utf8((const uint8_t*) c_string, length)) {
     return false;
   }
-  string->data = malloc(length);
+  if (!(string->data = malloc(length))) {
+    DIE_ERR("malloc()");
+  }
   string->capacity = string->length = length;
   memcpy(string->data, c_string, length);
   return true;
@@ -137,7 +139,6 @@ static int string_vwritef(struct Writer* writer, const char *fmt, va_list ap) {
     remaining = (int) (string->capacity - string->length);
     ret = vsnprintf(ptr, remaining, fmt, args);
   }
-  va_end(ap);
   va_end(args);
 
   // Validate UTF-8

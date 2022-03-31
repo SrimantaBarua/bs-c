@@ -80,6 +80,18 @@ static int ast_vec_print(const struct AstVec* vec, struct Writer* writer) {
   return ret;
 }
 
+static struct AstVec ast_vec_clone(const struct AstVec* vec) {
+  struct AstVec ret;
+  ret.length = vec->length;
+  ret.capacity = vec->capacity;
+  ret.data = NULL;
+  REALLOC(ret.data, ret.capacity * sizeof(struct Ast*));
+  for (size_t i = 0; i < ret.length; i++) {
+    ret.data[i] = ast_clone(vec->data[i]);
+  }
+  return ret;
+}
+
 void ast_pair_vec_init(struct AstPairVec* vec) {
   vec->data = NULL;
   vec->length = vec->capacity = 0;
@@ -103,6 +115,19 @@ void ast_pair_vec_push(struct AstPairVec* vec, struct Ast* key, struct Ast* valu
   vec->data[vec->length++] = pair;
 }
 
+static struct AstPairVec ast_pair_vec_clone(const struct AstPairVec* vec) {
+  struct AstPairVec ret;
+  ret.length = vec->length;
+  ret.capacity = vec->capacity;
+  ret.data = NULL;
+  REALLOC(ret.data, ret.capacity * sizeof(struct AstPair*));
+  for (size_t i = 0; i < ret.length; i++) {
+    ret.data[i].key = ast_clone(vec->data[i].key);
+    ret.data[i].value = ast_clone(vec->data[i].value);
+  }
+  return ret;
+}
+
 #define ALLOC_AST(TYPE, VAR, OFFSET)                \
   struct Ast##TYPE* VAR;                            \
   if (!(VAR = malloc(sizeof(struct Ast##TYPE)))) {  \
@@ -114,6 +139,12 @@ void ast_pair_vec_push(struct AstPairVec* vec, struct Ast* key, struct Ast* valu
 struct Ast* ast_program_create(size_t offset, struct AstVec statements) {
   ALLOC_AST(Program, program, offset);
   program->statements = statements;
+  return (struct Ast*) program;
+}
+
+static struct Ast* ast_program_clone(const struct AstProgram* ast) {
+  ALLOC_AST(Program, program, ast->ast.offset);
+  program->statements = ast_vec_clone(&ast->statements);
   return (struct Ast*) program;
 }
 
@@ -134,6 +165,13 @@ struct Ast* ast_block_create(size_t offset, struct AstVec statements, bool last_
   ALLOC_AST(Block, block, offset);
   block->last_had_semicolon = last_had_semicolon;
   block->statements = statements;
+  return (struct Ast*) block;
+}
+
+static struct Ast* ast_block_clone(const struct AstBlock* ast) {
+  ALLOC_AST(Block, block, ast->ast.offset);
+  block->last_had_semicolon = ast->last_had_semicolon;
+  block->statements = ast_vec_clone(&ast->statements);
   return (struct Ast*) block;
 }
 
@@ -163,6 +201,14 @@ struct Ast* ast_struct_create(size_t offset, const struct Str* opt_parent, struc
   return (struct Ast*) struct_node;
 }
 
+static struct Ast* ast_struct_clone(const struct AstStruct* ast) {
+  ALLOC_AST(Struct, struct_node, ast->ast.offset);
+  struct_node->has_parent = ast->has_parent;
+  struct_node->opt_parent = ast->opt_parent;
+  struct_node->body = ast_clone(ast->body);
+  return (struct Ast*) struct_node;
+}
+
 static int ast_struct_print(const struct AstStruct* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "(struct "));
@@ -188,6 +234,13 @@ struct Ast* ast_function_create(size_t offset, struct AstVec parameters, struct 
   return (struct Ast*) function;
 }
 
+static struct Ast* ast_function_clone(const struct AstFunction* ast) {
+  ALLOC_AST(Function, function, ast->ast.offset);
+  function->parameters = ast_vec_clone(&ast->parameters);
+  function->body = ast_clone(ast->body);
+  return (struct Ast*) function;
+}
+
 static int ast_function_print(const struct AstFunction* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "(fn (params"));
@@ -209,6 +262,14 @@ struct Ast* ast_if_create(size_t offset, struct Ast* condition, struct Ast* body
   if_statement->condition = condition;
   if_statement->body = body;
   if_statement->else_part = else_part;
+  return (struct Ast*) if_statement;
+}
+
+static struct Ast* ast_if_clone(const struct AstIf* ast) {
+  ALLOC_AST(If, if_statement, ast->ast.offset);
+  if_statement->condition = ast_clone(ast->condition);
+  if_statement->body = ast_clone(ast->body);
+  if_statement->else_part = ast_clone(ast->else_part);
   return (struct Ast*) if_statement;
 }
 
@@ -242,6 +303,13 @@ struct Ast* ast_while_create(size_t offset, struct Ast* condition, struct Ast* b
   return (struct Ast*) while_loop;
 }
 
+static struct Ast* ast_while_clone(const struct AstWhile* ast) {
+  ALLOC_AST(While, while_loop, ast->ast.offset);
+  while_loop->condition = ast_clone(ast->condition);
+  while_loop->body = ast_clone(ast->body);
+  return (struct Ast*) while_loop;
+}
+
 static int ast_while_print(const struct AstWhile* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "(while "));
@@ -263,6 +331,14 @@ struct Ast* ast_for_create(size_t offset, struct Str identifier, struct Ast* gen
   for_loop->identifier = identifier;
   for_loop->generator = generator;
   for_loop->body = body;
+  return (struct Ast*) for_loop;
+}
+
+static struct Ast* ast_for_clone(const struct AstFor* ast) {
+  ALLOC_AST(For, for_loop, ast->ast.offset);
+  for_loop->identifier = ast->identifier;
+  for_loop->generator = ast_clone(ast->generator);
+  for_loop->body = ast_clone(ast->body);
   return (struct Ast*) for_loop;
 }
 
@@ -292,6 +368,14 @@ struct Ast* ast_let_create(size_t offset, bool public, struct Str variable, stru
   return (struct Ast*) let;
 }
 
+static struct Ast* ast_let_clone(const struct AstLet* ast) {
+  ALLOC_AST(Let, let, ast->ast.offset);
+  let->public = ast->public;
+  let->variable = ast->variable;
+  let->rhs = ast_clone(ast->rhs);
+  return (struct Ast*) let;
+}
+
 static int ast_let_print(const struct AstLet* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "(let "));
@@ -313,6 +397,12 @@ struct Ast* ast_require_create(size_t offset, struct Str module) {
   return (struct Ast*) require;
 }
 
+static struct Ast* ast_require_clone(const struct AstRequire* ast) {
+  ALLOC_AST(Require, require, ast->ast.offset);
+  require->module = ast->module;
+  return (struct Ast*) require;
+}
+
 static int ast_require_print(const struct AstRequire* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "(require \""));
@@ -328,6 +418,12 @@ static void ast_require_free(struct AstRequire* ast) {
 struct Ast* ast_yield_create(size_t offset, struct Ast* value) {
   ALLOC_AST(Yield, yield, offset);
   yield->value = value;
+  return (struct Ast*) yield;
+}
+
+static struct Ast* ast_yield_clone(const struct AstYield* ast) {
+  ALLOC_AST(Yield, yield, ast->ast.offset);
+  yield->value = ast_clone(ast->value);
   return (struct Ast*) yield;
 }
 
@@ -349,6 +445,11 @@ struct Ast* ast_break_create(size_t offset) {
   return (struct Ast*) break_statement;
 }
 
+static struct Ast* ast_break_clone(const struct AstBreak* ast) {
+  ALLOC_AST(Break, break_statement, ast->ast.offset);
+  return (struct Ast*) break_statement;
+}
+
 static int ast_break_print(const struct AstBreak* ast, struct Writer* writer) {
   return writer->writef(writer, "(break)");
 }
@@ -359,6 +460,11 @@ static void ast_break_free(struct AstBreak* ast) {
 
 struct Ast* ast_continue_create(size_t offset) {
   ALLOC_AST(Continue, continue_statement, offset);
+  return (struct Ast*) continue_statement;
+}
+
+static struct Ast* ast_continue_clone(const struct AstContinue* ast) {
+  ALLOC_AST(Continue, continue_statement, ast->ast.offset);
   return (struct Ast*) continue_statement;
 }
 
@@ -373,6 +479,12 @@ static void ast_continue_free(struct AstContinue* ast) {
 struct Ast* ast_return_create(size_t offset, struct Ast* value) {
   ALLOC_AST(Return, return_statement, offset);
   return_statement->value = value;
+  return (struct Ast*) return_statement;
+}
+
+static struct Ast* ast_return_clone(const struct AstReturn* ast) {
+  ALLOC_AST(Return, return_statement, ast->ast.offset);
+  return_statement->value = ast_clone(ast->value);
   return (struct Ast*) return_statement;
 }
 
@@ -400,6 +512,13 @@ struct Ast* ast_member_create(size_t offset, struct Ast* lhs, struct Str member)
   return (struct Ast*) member_ref;
 }
 
+static struct Ast* ast_member_clone(const struct AstMember* ast) {
+  ALLOC_AST(Member, member_ref, ast->ast.offset);
+  member_ref->lhs = ast_clone(ast->lhs);
+  member_ref->member = ast->member;
+  return (struct Ast*) member_ref;
+}
+
 static int ast_member_print(const struct AstMember* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "(. "));
@@ -419,6 +538,13 @@ struct Ast* ast_index_create(size_t offset, struct Ast* lhs, struct Ast* index) 
   ALLOC_AST(Index, index_op, offset);
   index_op->lhs = lhs;
   index_op->index = index;
+  return (struct Ast*) index_op;
+}
+
+static struct Ast* ast_index_clone(const struct AstIndex* ast) {
+  ALLOC_AST(Index, index_op, ast->ast.offset);
+  index_op->lhs = ast_clone(ast->lhs);
+  index_op->index = ast_clone(ast->index);
   return (struct Ast*) index_op;
 }
 
@@ -446,6 +572,14 @@ struct Ast* ast_binary_create(size_t offset, enum BinaryOp operation, struct Ast
   return (struct Ast*) binary;
 }
 
+static struct Ast* ast_binary_clone(const struct AstBinary* ast) {
+  ALLOC_AST(Binary, binary, ast->ast.offset);
+  binary->operation = ast->operation;
+  binary->lhs = ast_clone(ast->lhs);
+  binary->rhs = ast_clone(ast->rhs);
+  return (struct Ast*) binary;
+}
+
 static int ast_binary_print(const struct AstBinary* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "(%s ", binary_op_to_str(ast->operation)));
@@ -466,6 +600,13 @@ struct Ast* ast_assignment_create(size_t offset, struct Ast* lhs, struct Ast* rh
   ALLOC_AST(Assignment, assignment, offset);
   assignment->lhs = lhs;
   assignment->rhs = rhs;
+  return (struct Ast*) assignment;
+}
+
+static struct Ast* ast_assignment_clone(const struct AstAssignment* ast) {
+  ALLOC_AST(Assignment, assignment, ast->ast.offset);
+  assignment->lhs = ast_clone(ast->lhs);
+  assignment->rhs = ast_clone(ast->rhs);
   return (struct Ast*) assignment;
 }
 
@@ -492,6 +633,13 @@ struct Ast* ast_unary_create(size_t offset, enum UnaryOp operation, struct Ast* 
   return (struct Ast*) unary;
 }
 
+static struct Ast* ast_unary_clone(const struct AstUnary* ast) {
+  ALLOC_AST(Unary, unary, ast->ast.offset);
+  unary->operation = ast->operation;
+  unary->rhs = ast_clone(ast->rhs);
+  return (struct Ast*) unary;
+}
+
 static int ast_unary_print(const struct AstUnary* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "(%s ", unary_op_to_str(ast->operation)));
@@ -509,6 +657,13 @@ struct Ast* ast_call_create(size_t offset, struct Ast* function, struct AstVec a
   ALLOC_AST(Call, call, offset);
   call->function = function;
   call->arguments = arguments;
+  return (struct Ast*) call;
+}
+
+static struct Ast* ast_call_clone(const struct AstCall* ast) {
+  ALLOC_AST(Call, call, ast->ast.offset);
+  call->function = ast_clone(ast->function);
+  call->arguments = ast_vec_clone(&ast->arguments);
   return (struct Ast*) call;
 }
 
@@ -532,6 +687,11 @@ struct Ast* ast_self_create(size_t offset) {
   return (struct Ast*) self;
 }
 
+struct Ast* ast_self_clone(const struct AstSelf* ast) {
+  ALLOC_AST(Self, self, ast->ast.offset);
+  return (struct Ast*) self;
+}
+
 static int ast_self_print(const struct AstSelf* ast, struct Writer* writer) {
   return writer->writef(writer, "self");
 }
@@ -542,6 +702,11 @@ static void ast_self_free(struct AstSelf* ast) {
 
 struct Ast* ast_varargs_create(size_t offset) {
   ALLOC_AST(Varargs, varargs, offset);
+  return (struct Ast*) varargs;
+}
+
+static struct Ast* ast_varargs_clone(const struct AstVarargs* ast) {
+  ALLOC_AST(Varargs, varargs, ast->ast.offset);
   return (struct Ast*) varargs;
 }
 
@@ -556,6 +721,12 @@ static void ast_varargs_free(struct AstVarargs* ast) {
 struct Ast* ast_array_create(size_t offset, struct AstVec elements) {
   ALLOC_AST(Array, array, offset);
   array->elements = elements;
+  return (struct Ast*) array;
+}
+
+static struct Ast* ast_array_clone(const struct AstArray* ast) {
+  ALLOC_AST(Array, array, ast->ast.offset);
+  array->elements = ast_vec_clone(&ast->elements);
   return (struct Ast*) array;
 }
 
@@ -578,6 +749,12 @@ struct Ast* ast_set_create(size_t offset, struct AstVec elements) {
   return (struct Ast*) set;
 }
 
+static struct Ast* ast_set_clone(const struct AstSet* ast) {
+  ALLOC_AST(Set, set, ast->ast.offset);
+  set->elements = ast_vec_clone(&ast->elements);
+  return (struct Ast*) set;
+}
+
 static int ast_set_print(const struct AstSet* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "(set "));
@@ -594,6 +771,12 @@ static void ast_set_free(struct AstSet* ast) {
 struct Ast* ast_dictionary_create(size_t offset, struct AstPairVec kvpairs) {
   ALLOC_AST(Dictionary, dict, offset);
   dict->pairs = kvpairs;
+  return (struct Ast*) dict;
+}
+
+static struct Ast* ast_dictionary_clone(const struct AstDictionary* ast) {
+  ALLOC_AST(Dictionary, dict, ast->ast.offset);
+  dict->pairs = ast_pair_vec_clone(&ast->pairs);
   return (struct Ast*) dict;
 }
 
@@ -622,6 +805,12 @@ struct Ast* ast_string_create(size_t offset, struct Str str) {
   return (struct Ast*) string;
 }
 
+static struct Ast* ast_string_clone(const struct AstString* ast) {
+  ALLOC_AST(String, string, ast->ast.offset);
+  string->string = ast->string;
+  return (struct Ast*) string;
+}
+
 static int ast_string_print(const struct AstString* ast, struct Writer* writer) {
   int ret = 0;
   TRY_ACCUM(ret, writer->writef(writer, "\""));
@@ -640,6 +829,12 @@ struct Ast* ast_identifier_create(size_t offset, struct Str str) {
   return (struct Ast*) identifier;
 }
 
+static struct Ast* ast_identifier_clone(const struct AstIdentifier* ast) {
+  ALLOC_AST(Identifier, identifier, ast->ast.offset);
+  identifier->identifier = ast->identifier;
+  return (struct Ast*) identifier;
+}
+
 static int ast_identifier_print(const struct AstIdentifier* ast, struct Writer* writer) {
   return str_print(&ast->identifier, writer);
 }
@@ -651,6 +846,12 @@ static void ast_identifier_free(struct AstIdentifier* ast) {
 struct Ast* ast_float_create(size_t offset, double f) {
   ALLOC_AST(Float, float_node, offset);
   float_node->f = f;
+  return (struct Ast*) float_node;
+}
+
+static struct Ast* ast_float_clone(const struct AstFloat* ast) {
+  ALLOC_AST(Float, float_node, ast->ast.offset);
+  float_node->f = ast->f;
   return (struct Ast*) float_node;
 }
 
@@ -668,6 +869,12 @@ struct Ast* ast_integer_create(size_t offset, int64_t i) {
   return (struct Ast*) integer_node;
 }
 
+static struct Ast* ast_integer_clone(const struct AstInteger* ast) {
+  ALLOC_AST(Integer, integer_node, ast->ast.offset);
+  integer_node->i = ast->i;
+  return (struct Ast*) integer_node;
+}
+
 static int ast_integer_print(const struct AstInteger* ast, struct Writer* writer) {
   return writer->writef(writer, "%ld", ast->i);
 }
@@ -678,6 +885,11 @@ static void ast_integer_free(struct AstInteger* ast) {
 
 struct Ast* ast_true_create(size_t offset) {
   ALLOC_AST(True, true_node, offset);
+  return (struct Ast*) true_node;
+}
+
+static struct Ast* ast_true_clone(const struct AstTrue* ast) {
+  ALLOC_AST(True, true_node, ast->ast.offset);
   return (struct Ast*) true_node;
 }
 
@@ -694,6 +906,11 @@ struct Ast* ast_false_create(size_t offset) {
   return (struct Ast*) false_node;
 }
 
+static struct Ast* ast_false_clone(const struct AstFalse* ast) {
+  ALLOC_AST(False, true_node, ast->ast.offset);
+  return (struct Ast*) true_node;
+}
+
 static int ast_false_print(const struct AstFalse* ast, struct Writer* writer) {
   return writer->writef(writer, "false");
 }
@@ -707,6 +924,10 @@ struct Ast* ast_ellipsis_create(size_t offset) {
   return (struct Ast*) ellipsis;
 }
 
+static struct Ast* ast_ellipsis_clone(const struct AstEllipsis* ast) {
+  ALLOC_AST(Ellipsis, ellipsis_node, ast->ast.offset);
+  return (struct Ast*) ellipsis_node;
+}
 
 static int ast_ellipsis_print(const struct AstEllipsis* ast, struct Writer* writer) {
   return writer->writef(writer, "...");
@@ -721,6 +942,11 @@ struct Ast* ast_nil_create(size_t offset) {
   return (struct Ast*) nil;
 }
 
+static struct Ast* ast_nil_clone(const struct AstNil* ast) {
+  ALLOC_AST(Nil, nil_node, ast->ast.offset);
+  return (struct Ast*) nil_node;
+}
+
 static int ast_nil_print(const struct AstNil* ast, struct Writer* writer) {
   return writer->writef(writer, "nil");
 }
@@ -732,7 +958,8 @@ static void ast_nil_free(struct AstNil* ast) {
 #undef ALLOC_AST
 
 int ast_print(const struct Ast* ast, struct Writer* writer) {
-#define REDIRECT_PRINT(TYPE, NAME) case AST_##TYPE: return ast_##NAME##_print((struct Ast##TYPE *) ast, writer);
+#define REDIRECT_PRINT(TYPE, NAME) \
+  case AST_##TYPE: return ast_##NAME##_print((struct Ast##TYPE *) ast, writer);
 
   if (!ast) {
     return 0;
@@ -777,8 +1004,56 @@ int ast_print(const struct Ast* ast, struct Writer* writer) {
 #undef REDIRECT_PRINT
 }
 
+struct Ast* ast_clone(const struct Ast* ast) {
+#define REDIRECT_CLONE(TYPE, NAME) \
+  case AST_##TYPE: return ast_##NAME##_clone((struct Ast##TYPE *) ast);
+
+  if (!ast) {
+    return NULL;
+  }
+
+  switch (ast->type) {
+  REDIRECT_CLONE(Program, program)
+  REDIRECT_CLONE(Block, block)
+  REDIRECT_CLONE(Struct, struct)
+  REDIRECT_CLONE(Function, function)
+  REDIRECT_CLONE(If, if)
+  REDIRECT_CLONE(While, while)
+  REDIRECT_CLONE(For, for)
+  REDIRECT_CLONE(Let, let)
+  REDIRECT_CLONE(Require, require)
+  REDIRECT_CLONE(Yield, yield)
+  REDIRECT_CLONE(Break, break)
+  REDIRECT_CLONE(Continue, continue)
+  REDIRECT_CLONE(Return, return)
+  REDIRECT_CLONE(Member, member)
+  REDIRECT_CLONE(Index, index)
+  REDIRECT_CLONE(Assignment, assignment)
+  REDIRECT_CLONE(Binary, binary)
+  REDIRECT_CLONE(Unary, unary)
+  REDIRECT_CLONE(Call, call)
+  REDIRECT_CLONE(Self, self)
+  REDIRECT_CLONE(Varargs, varargs)
+  REDIRECT_CLONE(Array, array)
+  REDIRECT_CLONE(Set, set)
+  REDIRECT_CLONE(Dictionary, dictionary)
+  REDIRECT_CLONE(String, string)
+  REDIRECT_CLONE(Identifier, identifier)
+  REDIRECT_CLONE(Float, float)
+  REDIRECT_CLONE(Integer, integer)
+  REDIRECT_CLONE(True, true)
+  REDIRECT_CLONE(False, false)
+  REDIRECT_CLONE(Ellipsis, ellipsis)
+  REDIRECT_CLONE(Nil, nil)
+  default: UNREACHABLE();
+  };
+
+#undef REDIRECT_CLONE
+}
+
 void ast_free(struct Ast* ast) {
-#define REDIRECT_FREE(TYPE, NAME) case AST_##TYPE: return ast_##NAME##_free((struct Ast##TYPE *) ast);
+#define REDIRECT_FREE(TYPE, NAME) \
+    case AST_##TYPE: return ast_##NAME##_free((struct Ast##TYPE *) ast);
 
   if (!ast) {
     return;

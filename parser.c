@@ -214,6 +214,10 @@ static struct Ast* dictionary_or_set(struct Parser* parser) {
     struct Ast* value = expression(parser);
     ast_pair_vec_push(&kvpairs, key, value);
     while (!match(parser, TOK_RightCurBr)) {
+      if (parser->current.type == TOK_EOF) {
+        parser->incomplete_input = true;
+        break;
+      }
       consume(parser, TOK_Comma);
       key = expression(parser);
       consume(parser, TOK_Colon);
@@ -224,6 +228,10 @@ static struct Ast* dictionary_or_set(struct Parser* parser) {
   } else {
     ast_vec_push(&elements, key);
     while (!match(parser, TOK_RightCurBr)) {
+      if (parser->current.type == TOK_EOF) {
+        parser->incomplete_input = true;
+        break;
+      }
       consume(parser, TOK_Comma);
       ast_vec_push(&elements, expression(parser));
     }
@@ -282,7 +290,6 @@ static struct Ast* atom(struct Parser* parser) {
   case TOK_Require:    return require(parser);
   case TOK_Yield:      return yield(parser);
   case TOK_LeftParen:
-    advance(parser);
     ast = expression(parser);
     consume(parser, TOK_RightParen);
     return ast;
@@ -339,8 +346,10 @@ static struct Ast* unary(struct Parser* parser, struct Ast* opt_primary) {
     advance(parser);
     return unary(parser, NULL);
   case TOK_Minus:
+    advance(parser);
     return ast_unary_create(offset, UO_Minus, unary(parser, NULL));
   case TOK_BitNot:
+    advance(parser);
     return ast_unary_create(offset, UO_BitNot, unary(parser, NULL));
   case TOK_EOF:
     parser->incomplete_input = true;
@@ -403,10 +412,7 @@ static struct Ast* shift_expression(struct Parser* parser, struct Ast* opt_prima
 
 static struct Ast* bitwise_and(struct Parser* parser, struct Ast* opt_primary) {
   struct Ast* ret = shift_expression(parser, opt_primary);
-  while (true) {
-    if (!match(parser, TOK_BitAnd)) {
-      return ret;
-    }
+  while (match(parser, TOK_BitAnd)) {
     size_t offset = parser->previous.offset;
     struct Ast* rhs = shift_expression(parser, NULL);
     ret = ast_binary_create(offset, BO_BitAnd, ret, rhs);
@@ -416,10 +422,7 @@ static struct Ast* bitwise_and(struct Parser* parser, struct Ast* opt_primary) {
 
 static struct Ast* bitwise_xor(struct Parser* parser, struct Ast* opt_primary) {
   struct Ast* ret = bitwise_and(parser, opt_primary);
-  while (true) {
-    if (!match(parser, TOK_BitXor)) {
-      return ret;
-    }
+  while (match(parser, TOK_BitXor)) {
     size_t offset = parser->previous.offset;
     struct Ast* rhs = bitwise_and(parser, NULL);
     ret = ast_binary_create(offset, BO_BitXor, ret, rhs);
@@ -429,10 +432,7 @@ static struct Ast* bitwise_xor(struct Parser* parser, struct Ast* opt_primary) {
 
 static struct Ast* bitwise_or(struct Parser* parser, struct Ast* opt_primary) {
   struct Ast* ret = bitwise_xor(parser, opt_primary);
-  while (true) {
-    if (!match(parser, TOK_BitOr)) {
-      return ret;
-    }
+  while (match(parser, TOK_BitOr)) {
     size_t offset = parser->previous.offset;
     struct Ast* rhs = bitwise_xor(parser, NULL);
     ret = ast_binary_create(offset, BO_BitOr, ret, rhs);
@@ -480,10 +480,7 @@ static struct Ast* inversion(struct Parser* parser, struct Ast* opt_primary) {
 
 static struct Ast* conjunction(struct Parser* parser, struct Ast* opt_primary) {
   struct Ast* ret = inversion(parser, opt_primary);
-  while (true) {
-    if (!match(parser, TOK_And)) {
-      break;
-    }
+  while (match(parser, TOK_And)) {
     size_t offset = parser->previous.offset;
     struct Ast* rhs = inversion(parser, NULL);
     ret = ast_binary_create(offset, BO_LogicalAnd, ret, rhs);
@@ -493,10 +490,7 @@ static struct Ast* conjunction(struct Parser* parser, struct Ast* opt_primary) {
 
 static struct Ast* disjunction(struct Parser* parser, struct Ast* opt_primary) {
   struct Ast* ret = conjunction(parser, opt_primary);
-  while (true) {
-    if (!match(parser, TOK_Or)) {
-      break;
-    }
+  while (match(parser, TOK_Or)) {
     size_t offset = parser->previous.offset;
     struct Ast* rhs = conjunction(parser, NULL);
     ret = ast_binary_create(offset, BO_LogicalOr, ret, rhs);
@@ -544,17 +538,38 @@ static struct Ast* assignment_or_expression(struct Parser* parser) {
     advance(parser);
     struct Ast* rhs = expression(parser);
     switch (token_type) {
-    case TOK_AddAssign:        rhs = ast_binary_create(offset, BO_Add, lhs, rhs); break;
-    case TOK_SubAssign:        rhs = ast_binary_create(offset, BO_Subtract, lhs, rhs); break;
-    case TOK_MulAssign:        rhs = ast_binary_create(offset, BO_Multiply, lhs, rhs); break;
-    case TOK_DivAssign:        rhs = ast_binary_create(offset, BO_Divide, lhs, rhs); break;
-    case TOK_ModAssign:        rhs = ast_binary_create(offset, BO_Modulo, lhs, rhs); break;
-    case TOK_ShiftLeftAssign:  rhs = ast_binary_create(offset, BO_ShiftLeft, lhs, rhs); break;
-    case TOK_ShiftRightAssign: rhs = ast_binary_create(offset, BO_ShiftRight, lhs, rhs); break;
-    case TOK_BitOrAssign:      rhs = ast_binary_create(offset, BO_BitOr, lhs, rhs); break;
-    case TOK_BitXorAssign:     rhs = ast_binary_create(offset, BO_BitXor, lhs, rhs); break;
-    case TOK_BitAndAssign:     rhs = ast_binary_create(offset, BO_BitAnd, lhs, rhs); break;
-    case TOK_Assign:           break;
+    case TOK_AddAssign:
+      rhs = ast_binary_create(offset, BO_Add, ast_clone(lhs), rhs);
+      break;
+    case TOK_SubAssign:
+      rhs = ast_binary_create(offset, BO_Subtract, ast_clone(lhs), rhs);
+      break;
+    case TOK_MulAssign:
+      rhs = ast_binary_create(offset, BO_Multiply, ast_clone(lhs), rhs);
+      break;
+    case TOK_DivAssign:
+      rhs = ast_binary_create(offset, BO_Divide, ast_clone(lhs), rhs);
+      break;
+    case TOK_ModAssign:
+      rhs = ast_binary_create(offset, BO_Modulo, ast_clone(lhs), rhs);
+      break;
+    case TOK_ShiftLeftAssign:
+      rhs = ast_binary_create(offset, BO_ShiftLeft, ast_clone(lhs), rhs);
+      break;
+    case TOK_ShiftRightAssign:
+      rhs = ast_binary_create(offset, BO_ShiftRight, ast_clone(lhs), rhs);
+      break;
+    case TOK_BitOrAssign:
+      rhs = ast_binary_create(offset, BO_BitOr, ast_clone(lhs), rhs);
+      break;
+    case TOK_BitXorAssign:
+      rhs = ast_binary_create(offset, BO_BitXor, ast_clone(lhs), rhs);
+      break;
+    case TOK_BitAndAssign:
+      rhs = ast_binary_create(offset, BO_BitAnd, ast_clone(lhs), rhs);
+      break;
+    case TOK_Assign:
+      break;
     default:
       UNREACHABLE();
     }
@@ -610,6 +625,10 @@ static struct Ast* struct_declaration(struct Parser* parser, bool public) {
   consume(parser, TOK_LeftCurBr);
   size_t body_offset = parser->current.offset;
   while (!match(parser, TOK_RightCurBr)) {
+    if (parser->current.type == TOK_EOF) {
+      parser->incomplete_input = true;
+      break;
+    }
     bool public = match(parser, TOK_Pub);
     ast_vec_push(&members, function_declaration(parser, public, true));
   }
@@ -729,10 +748,12 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
 // Initialize the parser
 static void parser_init(struct Parser* parser, const char* source, struct Writer* writer) {
   lexer_init(&parser->lexer, source);
-  advance(parser); // Jump-start parsing
+  token_init_undefined(&parser->previous);
+  token_init_undefined(&parser->current);
   parser->writer = writer;
   parser->had_error = false;
   parser->panic_mode = false;
+  advance(parser); // Jump-start parsing
 }
 
 struct Ast* parse(const char* source, struct Writer *err_writer, bool* incomplete_input) {

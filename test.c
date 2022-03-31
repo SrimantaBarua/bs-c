@@ -59,7 +59,8 @@ static void run_test(const struct Test* test) {
     test->test_function();
     exit(0);
   } else {
-    // In parent process, create a RunningTest and append to list.
+    // In parent process, close the write end, and create a RunningTest and append to list.
+    close(fds[1]);
     struct RunningTest running_test;
     running_test.suite_name = test->suite_name;
     running_test.test_name = test->test_name;

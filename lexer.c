@@ -77,7 +77,14 @@ const char* token_type_to_string(enum TokenType token_type) {
   case TOK_ModAssign:        return "%=";
   case TOK_Error:            return "Error";
   case TOK_EOF:              return "EOF";
+  case TOK_Undefined:        return "Undefined";
   }
+}
+
+void token_init_undefined(struct Token* token) {
+  token->type = TOK_Undefined;
+  token->offset = 0;
+  str_init(&token->text, " - ", 3);
 }
 
 void lexer_init(struct Lexer* lexer, const char *source) {

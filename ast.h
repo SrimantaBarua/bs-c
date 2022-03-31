@@ -359,6 +359,9 @@ struct Ast* ast_nil_create(size_t offset);
 // Print AST recursively. Return the number of bytes written, and -1 on error.
 int ast_print(const struct Ast* ast, struct Writer* writer);
 
+// Recursively clone an AST
+struct Ast* ast_clone(const struct Ast* ast);
+
 // Free root AST node. This internally figures out which type of node it is, and
 // recursively frees all child nodes.
 void ast_free(struct Ast* ast);

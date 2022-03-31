@@ -78,6 +78,7 @@ enum TokenType {
   // Misc.
   TOK_Error,
   TOK_EOF,
+  TOK_Undefined,
 };
 
 // Get string representation for token
@@ -89,6 +90,9 @@ struct Token {
   struct Str text;     // Slice of input string for the token
   size_t offset;       // Offset into the input string where the token starts
 };
+
+// Initialize something as an "undefined" token
+void token_init_undefined(struct Token* token);
 
 // Pull-based lexer. Call `lexer_tok` to advance
 struct Lexer {
