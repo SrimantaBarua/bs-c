@@ -84,6 +84,10 @@ static bool match(struct Parser* parser, enum TokenType type) {
 // Checks if the next token's type is `type`. If yes, advances the parser.
 // Otherwise trigers an error.
 static void consume(struct Parser* parser, enum TokenType type) {
+  if (parser->current.type == TOK_EOF) {
+    parser->incomplete_input = true;
+    return;
+  }
   if (!match(parser, type)) {
     error_at_current(parser, "expected %s, found ", token_type_to_string(type));
   }

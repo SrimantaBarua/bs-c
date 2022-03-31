@@ -23,13 +23,23 @@
   str_init(&target_str, TARGET, SIZE_MAX);                              \
   ASSERT_STR_EQ(target_str, ((struct Str) { ast_buf.data, ast_buf.length }));
 
-#define E2E_TEST(INPUT, TARGET) do {                                    \
-    SETUP()                                                             \
-    bool incomplete_input = false;                                      \
-    struct Ast* ast = parse(INPUT, err_writer, &incomplete_input);      \
-    ASSERT(!incomplete_input);                                          \
-    COMPARE_TO(TARGET)                                                  \
-    TEARDOWN();                                                         \
+#define E2E_TEST(INPUT, TARGET) do {                               \
+    SETUP()                                                        \
+    bool incomplete_input = false;                                 \
+    struct Ast* ast = parse(INPUT, err_writer, &incomplete_input); \
+    ASSERT(ast != NULL);                                           \
+    ASSERT(!incomplete_input);                                     \
+    COMPARE_TO(TARGET)                                             \
+    TEARDOWN();                                                    \
+  } while (0)
+
+#define E2E_INCOMPLETE(INPUT) do {                                 \
+    SETUP()                                                        \
+    bool incomplete_input = false;                                 \
+    struct Ast* ast = parse(INPUT, err_writer, &incomplete_input); \
+    ASSERT(ast == NULL);                                           \
+    ASSERT(incomplete_input);                                      \
+    TEARDOWN();                                                    \
   } while (0)
 
 TEST(Parser, SimpleIfElse) {
@@ -46,6 +56,18 @@ TEST(Parser, FibonacciFunction) {
   E2E_TEST("fn fib(n) { if n <= 1 { 1 } else { fib(n - 1) + fib(n - 2) } }",
            "(program (let fib <private> (fn (params n) (block <ret> (if (<= n 1) (block <ret> 1) "
            "(else (block <ret> (+ (call fib (- n 1)) (call fib (- n 2))))))))))");
+}
+
+TEST(Parser, FactorialWithNewlines) {
+  E2E_TEST("fn fact(n) {\n"
+           "  if n <= 1 {\n"
+           "    1\n"
+           "  } else {\n"
+           "    n * fact(n - 1)\n"
+           "  }\n"
+           "}\n",
+           "(program (let fact <private> (fn (params n) (block <ret> (if (<= n 1) (block <ret> 1) "
+           "(else (block <ret> (* n (call fact (- n 1))))))))))");
 }
 
 TEST(Parser, PointStruct) {
@@ -88,4 +110,8 @@ TEST(Parser, Return) {
 TEST_FAIL(Parser, MissedSemicolon) {
   E2E_TEST("fn f1() { let a = 2\nreturn a; }",
            "(program (let f1 <private> (fn (params) (block <noret> (let a <private> 2) (return a)))))");
+}
+
+TEST(Parser, Incomplete) {
+  E2E_INCOMPLETE("fn f1() {");
 }
