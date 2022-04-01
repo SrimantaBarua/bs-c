@@ -74,6 +74,16 @@ struct IrInstrAssignment {
   struct Temp source;
 };
 
+struct IrInstrPush {
+  struct Temp source;
+};
+
+struct IrInstrCall {
+  struct Temp destination;
+  struct Temp function;
+  size_t num_args;
+};
+
 // Type of IR instruction
 enum IrInstrType {
   II_Literal,      // Copy the value of a literal to a temporary
@@ -86,6 +96,8 @@ enum IrInstrType {
   II_Index,        // Indexing into a collection
   II_IndexLvalue,  // Indexing into a collection as an lvalue
   II_Assignment,   // Assign to an lvalue
+  II_Push,         // Push temporary onto the stack
+  II_Call,         // Call a function (temporary) and give number of arguments
 };
 
 // A single "instruction" in the (mostly) 3-address-code IR
@@ -100,6 +112,8 @@ struct IrInstr {
     struct IrInstrMember member;
     struct IrInstrIndex index;
     struct IrInstrAssignment assign;
+    struct IrInstrPush push;
+    struct IrInstrCall call;
   };
 };
 

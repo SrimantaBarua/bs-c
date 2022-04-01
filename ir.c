@@ -229,6 +229,31 @@ static void write_assignment_instr(struct IrGenerator* gen, size_t offset, struc
   chunk_push_instr(gen->current_chunk, instruction);
 }
 
+static void write_push(struct IrGenerator* gen, size_t offset, struct Temp source) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Push,
+    .push = (struct IrInstrPush) {
+      .source = source,
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_call(struct IrGenerator* gen, size_t offset, struct Temp dest, struct Temp func,
+                       size_t num_args) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Call,
+    .call = (struct IrInstrCall) {
+      .destination = dest,
+      .function = func,
+      .num_args = num_args,
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
 // Forward declaration
 static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_chunk, struct Temp* result);
 
@@ -384,6 +409,24 @@ static bool emit_integer(struct IrGenerator* gen, const struct AstInteger* ast, 
   return true;
 }
 
+static bool emit_call(struct IrGenerator* gen, const struct AstCall* ast, struct Temp* result) {
+  struct Temp dest, func;
+  for (size_t i = 0; i < ast->arguments.length; i++) {
+    struct Temp arg;
+    if (!emit(gen, ast->arguments.data[i], false, &arg)) {
+      return false;
+    }
+    write_push(gen, ast->ast.offset, arg);
+  }
+  if (!emit(gen, ast->function, false, &func)) {
+    return false;
+  }
+  dest = new_temp(gen);
+  write_call(gen, ast->ast.offset, dest, func, ast->arguments.length);
+  *result = dest;
+  return true;
+}
+
 static bool emit_lvalue(struct IrGenerator* gen, const struct Ast* ast, struct Temp* result) {
   switch (ast->type) {
   case AST_Identifier:
@@ -465,9 +508,7 @@ static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_ch
   case AST_Assignment: return emit_assignment(gen, (const struct AstAssignment*) ast, result);
   case AST_Binary:     return emit_binary(gen, (const struct AstBinary*) ast, result);
   case AST_Unary:      return emit_unary(gen, (const struct AstUnary*) ast, result);
-  case AST_Call:
-    UNIMPLEMENTED();
-    break;
+  case AST_Call:       return emit_call(gen, (const struct AstCall*) ast, result);
   case AST_Self:
     UNIMPLEMENTED();
     break;
@@ -583,6 +624,15 @@ static void ir_instr_assignment_print(const struct IrInstrAssignment* instr, str
   writer->writef(writer, "  *t%llu := t%llu\n", instr->destination.i, instr->source.i);
 }
 
+static void ir_instr_push_print(const struct IrInstrPush* instr, struct Writer* writer) {
+  writer->writef(writer, "  push t%llu\n", instr->source.i);
+}
+
+static void ir_instr_call_print(const struct IrInstrCall* instr, struct Writer* writer) {
+  writer->writef(writer, "  t%llu := t%llu(%lu)\n", instr->destination.i, instr->function.i,
+                 instr->num_args);
+}
+
 void ir_chunk_print(const struct IrChunk *root_chunk, const char *name, struct Writer *writer) {
   writer->writef(writer, "%s:\n", name);
   for (size_t i = 0; i < root_chunk->length; i++) {
@@ -617,6 +667,12 @@ void ir_chunk_print(const struct IrChunk *root_chunk, const char *name, struct W
       break;
     case II_Assignment:
       ir_instr_assignment_print(&instr->assign, writer);
+      break;
+    case II_Push:
+      ir_instr_push_print(&instr->push, writer);
+      break;
+    case II_Call:
+      ir_instr_call_print(&instr->call, writer);
       break;
     default:
       UNREACHABLE();
