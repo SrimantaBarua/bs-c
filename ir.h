@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "ast.h"
+#include "string.h"
 #include "writer.h"
 
 // A temporary generated for the IR
@@ -30,13 +31,13 @@ struct IrLiteral {
 };
 
 // Assign a literal to a temporary
-struct IrInstrLiteralIntoTemp {
+struct IrInstrLiteral {
   struct Temp destination;
   struct IrLiteral literal;
 };
 
 // Copy the value of a variable to a temporary
-struct IrInstrVarIntoTemp {
+struct IrInstrVar {
   struct Temp destination;
   struct Str identifier;
 };
@@ -55,12 +56,35 @@ struct IrInstrUnary {
   struct Temp rhs;
 };
 
+struct IrInstrMember {
+  struct Temp destination;
+  struct Temp lhs;
+  struct Str member;
+};
+
+struct IrInstrIndex {
+  struct Temp destination;
+  struct Temp lhs;
+  struct Temp index;
+};
+
+struct IrInstrAssignment {
+  struct Temp destination;
+  struct Temp source;
+};
+
 // Type of IR instruction
 enum IrInstrType {
-  II_LiteralIntoTemp, // Copy the value of a literal to a temporary
-  II_VarIntoTemp,     // Copy the value of a variable to a temporary
-  II_Binary,          // A binary operation assigning to a temporary
-  II_Unary,           // A unary operation assigning to a temporary
+  II_Literal,      // Copy the value of a literal to a temporary
+  II_VarRvalue,    // Copy the value of a variable to a temporary
+  II_Binary,       // A binary operation assigning to a temporary
+  II_Unary,        // A unary operation assigning to a temporary
+  II_VarLvalue,    // Accessing the address of a variable to use as an lvalue
+  II_Member,       // Accessing a struct member
+  II_MemberLvalue, // Accessing a struct member as an lvalue
+  II_Index,        // Indexing into a collection
+  II_IndexLvalue,  // Indexing into a collection as an lvalue
+  II_Assignment,   // Assign to an lvalue
 };
 
 // A single "instruction" in the (mostly) 3-address-code IR
@@ -68,10 +92,13 @@ struct IrInstr {
   size_t offset;          // Offset into source code
   enum IrInstrType type;  // Type of instruction
   union {
-    struct IrInstrLiteralIntoTemp literal;
-    struct IrInstrVarIntoTemp var;
+    struct IrInstrLiteral literal;
+    struct IrInstrVar var;
     struct IrInstrBinary binary;
     struct IrInstrUnary unary;
+    struct IrInstrMember member;
+    struct IrInstrIndex index;
+    struct IrInstrAssignment assign;
   };
 };
 

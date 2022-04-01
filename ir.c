@@ -9,9 +9,11 @@
 #include "ir.h"
 
 #include <stdlib.h>
+#include <stdarg.h>
 
 #include "ast.h"
 #include "log.h"
+#include "writer.h"
 
 #define INVALID_TEMP ((struct Temp) { UINT64_MAX })
 #define TEMP_IS_INVALID(TEMP) ((TEMP).i == UINT64_MAX)
@@ -22,6 +24,25 @@ struct IrGenerator {
   size_t next_temp;              // Next temporary value to generate
   const char* source;            // The original source code (for error messages)
 };
+
+static void error(struct IrGenerator* gen, const struct Ast* ast, const char *fmt, ...) {
+  va_list ap;
+  gen->writer->writef(gen->writer, "\x1b[1;31mERROR\x1b[0m: ");
+  va_start(ap, fmt);
+  gen->writer->vwritef(gen->writer, fmt, ap);
+  va_end(ap);
+  ast_print(ast, gen->writer);
+  struct SourceLine line;
+  const char *source = gen->source;
+  if (get_source_line(source, ast->offset, 1, &line)) {
+    gen->writer->writef(gen->writer, "\n[%lu]: %.*s\x1b[1;4m%.*s\x1b[0m%.*s\n",
+                        line.line_number, line.range_start, line.start,
+                        line.range_end - line.range_start, line.start + line.range_start,
+                        line.length - line.range_end, line.start + line.range_end);
+  } else {
+    gen->writer->writef(gen->writer, "\n");
+  }
+}
 
 // FIXME: This doesn't check for overflow, and assumes temp index will never overflow
 static struct Temp new_temp(struct IrGenerator* gen) {
@@ -37,6 +58,62 @@ static void chunk_push_instr(struct IrChunk* chunk, struct IrInstr instr) {
     chunk->capacity = new_capacity;
   }
   chunk->instrs[chunk->length++] = instr;
+}
+
+static void write_member_instr(struct IrGenerator* gen, size_t offset, struct Temp dest,
+                               struct Temp lhs, struct Str member) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Member,
+    .member = (struct IrInstrMember) {
+      .destination = dest,
+      .lhs = lhs,
+      .member = member,
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_member_lvalue_instr(struct IrGenerator* gen, size_t offset, struct Temp dest,
+                                      struct Temp lhs, struct Str member) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_MemberLvalue,
+    .member = (struct IrInstrMember) {
+      .destination = dest,
+      .lhs = lhs,
+      .member = member,
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_index_instr(struct IrGenerator* gen, size_t offset, struct Temp dest,
+                              struct Temp lhs, struct Temp index) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Index,
+    .index = (struct IrInstrIndex) {
+      .destination = dest,
+      .lhs = lhs,
+      .index = index,
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_index_lvalue_instr(struct IrGenerator* gen, size_t offset, struct Temp dest,
+                                     struct Temp lhs, struct Temp index) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_IndexLvalue,
+    .index = (struct IrInstrIndex) {
+      .destination = dest,
+      .lhs = lhs,
+      .index = index,
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
 }
 
 static void write_binary_instr(struct IrGenerator* gen, size_t offset, struct Temp dest,
@@ -72,8 +149,21 @@ static void write_variable_access(struct IrGenerator* gen, size_t offset, struct
                                   struct Str identifier) {
   struct IrInstr instruction = {
     .offset = offset,
-    .type = II_VarIntoTemp,
-    .var = (struct IrInstrVarIntoTemp) {
+    .type = II_VarRvalue,
+    .var = (struct IrInstrVar) {
+      .destination = dest,
+      .identifier = identifier,
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_variable_lvalue(struct IrGenerator* gen, size_t offset, struct Temp dest,
+                                  struct Str identifier) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_VarLvalue,
+    .var = (struct IrInstrVar) {
       .destination = dest,
       .identifier = identifier,
     }
@@ -84,13 +174,26 @@ static void write_variable_access(struct IrGenerator* gen, size_t offset, struct
 static void write_integer_literal(struct IrGenerator* gen, size_t offset, struct Temp dest, int64_t i) {
   struct IrInstr instruction = {
     .offset = offset,
-    .type = II_LiteralIntoTemp,
-    .literal = (struct IrInstrLiteralIntoTemp) {
+    .type = II_Literal,
+    .literal = (struct IrInstrLiteral) {
       .destination = dest,
       .literal = (struct IrLiteral) {
         .type = IL_Integer,
         .i = i
       }
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_assignment_instr(struct IrGenerator* gen, size_t offset, struct Temp lhs,
+                                   struct Temp rhs) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Assignment,
+    .assign = (struct IrInstrAssignment) {
+      .destination = lhs,
+      .source = rhs,
     }
   };
   chunk_push_instr(gen->current_chunk, instruction);
@@ -107,6 +210,74 @@ static bool emit_program(struct IrGenerator* gen, const struct AstProgram* ast, 
     }
   }
   *result = INVALID_TEMP;
+  return true;
+}
+
+static bool emit_member(struct IrGenerator* gen, const struct AstMember* ast, struct Temp* result) {
+  struct Temp lhs, dest;
+  if (!emit(gen, ast->lhs, false, &lhs)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(lhs)) {
+    return false;
+  }
+  dest = new_temp(gen);
+  write_member_instr(gen, ast->ast.offset, dest, lhs, ast->member);
+  *result = dest;
+  return true;
+}
+
+static bool emit_member_lvalue(struct IrGenerator* gen, const struct AstMember* ast, struct Temp* result) {
+  struct Temp lhs, dest;
+  if (!emit(gen, ast->lhs, false, &lhs)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(lhs)) {
+    return false;
+  }
+  dest = new_temp(gen);
+  write_member_lvalue_instr(gen, ast->ast.offset, dest, lhs, ast->member);
+  *result = dest;
+  return true;
+}
+
+static bool emit_index(struct IrGenerator* gen, const struct AstIndex* ast, struct Temp* result) {
+  struct Temp lhs, index, dest;
+  if (!emit(gen, ast->lhs, false, &lhs)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(lhs)) {
+    return false;
+  }
+  if (!emit(gen, ast->index, false, &index)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(index)) {
+    return false;
+  }
+  dest = new_temp(gen);
+  write_index_instr(gen, ast->ast.offset, dest, lhs, index);
+  *result = dest;
+  return true;
+}
+
+static bool emit_index_lvalue(struct IrGenerator* gen, const struct AstIndex* ast, struct Temp* result) {
+  struct Temp lhs, index, dest;
+  if (!emit(gen, ast->lhs, false, &lhs)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(lhs)) {
+    return false;
+  }
+  if (!emit(gen, ast->index, false, &index)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(index)) {
+    return false;
+  }
+  dest = new_temp(gen);
+  write_index_lvalue_instr(gen, ast->ast.offset, dest, lhs, index);
+  *result = dest;
   return true;
 }
 
@@ -153,10 +324,53 @@ static bool emit_identifier(struct IrGenerator* gen, const struct AstIdentifier*
   return true;
 }
 
+// TODO: Refer to the "environment" to see if we should capture any variables (i.e. is this a closure?)
+static bool emit_identifier_lvalue(struct IrGenerator* gen, const struct AstIdentifier* ast,
+                                   struct Temp* result) {
+  struct Temp dest = new_temp(gen);
+  write_variable_lvalue(gen, ast->ast.offset, dest, ast->identifier);
+  *result = dest;
+  return true;
+}
+
 static bool emit_integer(struct IrGenerator* gen, const struct AstInteger* ast, struct Temp* result) {
   struct Temp dest = new_temp(gen);
   write_integer_literal(gen, ast->ast.offset, dest, ast->i);
   *result = dest;
+  return true;
+}
+
+static bool emit_lvalue(struct IrGenerator* gen, const struct Ast* ast, struct Temp* result) {
+  switch (ast->type) {
+  case AST_Identifier:
+    return emit_identifier_lvalue(gen, (const struct AstIdentifier*) ast, result);
+  case AST_Member:
+    return emit_member_lvalue(gen, (const struct AstMember*) ast, result);
+  case AST_Index:
+    return emit_index_lvalue(gen, (const struct AstIndex*) ast, result);
+  default:
+    error(gen, ast, "expected lvalue, found: ");
+    *result = INVALID_TEMP;
+    return false;
+  }
+}
+
+static bool emit_assignment(struct IrGenerator* gen, const struct AstAssignment* ast, struct Temp* result) {
+  struct Temp lhs, rhs;
+  if (!emit_lvalue(gen, ast->lhs, &lhs)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(lhs)) {
+    return false;
+  }
+  if (!emit(gen, ast->rhs, false, &rhs)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(rhs)) {
+    return false;
+  }
+  write_assignment_instr(gen, ast->ast.offset, lhs, rhs);
+  *result = INVALID_TEMP;
   return true;
 }
 
@@ -203,13 +417,13 @@ static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_ch
     UNIMPLEMENTED();
     break;
   case AST_Member:
-    UNIMPLEMENTED();
+    return emit_member(gen, (const struct AstMember*) ast, result);
     break;
   case AST_Index:
-    UNIMPLEMENTED();
+    return emit_index(gen, (const struct AstIndex*) ast, result);
     break;
   case AST_Assignment:
-    UNIMPLEMENTED();
+    return emit_assignment(gen, (const struct AstAssignment*) ast, result);
     break;
   case AST_Binary:
     return emit_binary(gen, (const struct AstBinary*) ast, result);
@@ -279,8 +493,7 @@ bool ir_generate(const char *source, const struct Ast *ast, struct IrChunk *root
   return emit(&generator, ast, true, &dummy);
 }
 
-static void ir_instr_literal_into_temp_print(const struct IrInstrLiteralIntoTemp* instr,
-                                             struct Writer* writer) {
+static void ir_instr_literal_print(const struct IrInstrLiteral* instr, struct Writer* writer) {
   writer->writef(writer, "  t%llu := ", instr->destination.i);
   switch (instr->literal.type) {
   case IL_Nil:
@@ -306,9 +519,13 @@ static void ir_instr_literal_into_temp_print(const struct IrInstrLiteralIntoTemp
   }
 }
 
-static void ir_instr_var_into_temp_print(const struct IrInstrVarIntoTemp* instr,
-                                         struct Writer* writer) {
+static void ir_instr_var_rvalue_print(const struct IrInstrVar* instr, struct Writer* writer) {
   writer->writef(writer, "  t%llu := %.*s\n", instr->destination.i, instr->identifier.length,
+                 (const char*) instr->identifier.data);
+}
+
+static void ir_instr_var_lvalue_print(const struct IrInstrVar* instr, struct Writer* writer) {
+  writer->writef(writer, "  t%llu := &%.*s\n", instr->destination.i, instr->identifier.length,
                  (const char*) instr->identifier.data);
 }
 
@@ -322,22 +539,62 @@ static void ir_instr_unary_print(const struct IrInstrUnary* instr, struct Writer
                  unary_op_to_str(instr->operation), instr->rhs.i);
 }
 
+static void ir_instr_member_rvalue_print(const struct IrInstrMember* instr, struct Writer* writer) {
+  writer->writef(writer, "  t%llu := t%llu.%.*s\n", instr->destination.i, instr->lhs.i,
+                 instr->member.length, (const char*) instr->member.data);
+}
+
+static void ir_instr_member_lvalue_print(const struct IrInstrMember* instr, struct Writer* writer) {
+  writer->writef(writer, "  t%llu := &t%llu.%.*s\n", instr->destination.i, instr->lhs.i,
+                 instr->member.length, (const char*) instr->member.data);
+}
+
+static void ir_instr_index_rvalue_print(const struct IrInstrIndex* instr, struct Writer* writer) {
+  writer->writef(writer, "  t%llu := t%llu[t%llu]\n", instr->destination.i, instr->lhs.i, instr->index.i);
+}
+
+static void ir_instr_index_lvalue_print(const struct IrInstrIndex* instr, struct Writer* writer) {
+  writer->writef(writer, "  t%llu := &t%llu[t%llu]\n", instr->destination.i, instr->lhs.i, instr->index.i);
+}
+
+static void ir_instr_assignment_print(const struct IrInstrAssignment* instr, struct Writer* writer) {
+  writer->writef(writer, "  *t%llu := t%llu\n", instr->destination.i, instr->source.i);
+}
+
 void ir_chunk_print(const struct IrChunk *root_chunk, const char *name, struct Writer *writer) {
   writer->writef(writer, "%s:\n", name);
   for (size_t i = 0; i < root_chunk->length; i++) {
     const struct IrInstr* instr = &root_chunk->instrs[i];
     switch (instr->type) {
-    case II_LiteralIntoTemp:
-      ir_instr_literal_into_temp_print(&instr->literal, writer);
+    case II_Literal:
+      ir_instr_literal_print(&instr->literal, writer);
       break;
-    case II_VarIntoTemp:
-      ir_instr_var_into_temp_print(&instr->var, writer);
+    case II_VarRvalue:
+      ir_instr_var_rvalue_print(&instr->var, writer);
       break;
     case II_Binary:
       ir_instr_binary_print(&instr->binary, writer);
       break;
     case II_Unary:
       ir_instr_unary_print(&instr->unary, writer);
+      break;
+    case II_VarLvalue:
+      ir_instr_var_lvalue_print(&instr->var, writer);
+      break;
+    case II_Member:
+      ir_instr_member_rvalue_print(&instr->member, writer);
+      break;
+    case II_MemberLvalue:
+      ir_instr_member_lvalue_print(&instr->member, writer);
+      break;
+    case II_Index:
+      ir_instr_index_rvalue_print(&instr->index, writer);
+      break;
+    case II_IndexLvalue:
+      ir_instr_index_lvalue_print(&instr->index, writer);
+      break;
+    case II_Assignment:
+      ir_instr_assignment_print(&instr->assign, writer);
       break;
     default:
       UNREACHABLE();
