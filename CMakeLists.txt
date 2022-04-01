@@ -30,6 +30,7 @@ target_link_libraries(bsc PRIVATE bs)
 add_executable(tests
   test.c
   ast-test.c
+  ir-test.c
   lexer-test.c
   parser-test.c
   string-test.c

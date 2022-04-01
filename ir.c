@@ -54,6 +54,33 @@ static void write_binary_instr(struct IrGenerator* gen, size_t offset, struct Te
   chunk_push_instr(gen->current_chunk, instruction);
 }
 
+static void write_unary_instr(struct IrGenerator* gen, size_t offset, struct Temp dest,
+                               enum UnaryOp op, struct Temp rhs) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Unary,
+    .unary = (struct IrInstrUnary) {
+      .destination = dest,
+      .operation = op,
+      .rhs = rhs,
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_variable_access(struct IrGenerator* gen, size_t offset, struct Temp dest,
+                                  struct Str identifier) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_VarIntoTemp,
+    .var = (struct IrInstrVarIntoTemp) {
+      .destination = dest,
+      .identifier = identifier,
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
 static void write_integer_literal(struct IrGenerator* gen, size_t offset, struct Temp dest, int64_t i) {
   struct IrInstr instruction = {
     .offset = offset,
@@ -99,6 +126,29 @@ static bool emit_binary(struct IrGenerator* gen, const struct AstBinary* ast, st
   }
   dest = new_temp(gen);
   write_binary_instr(gen, ast->ast.offset, dest, ast->operation, lhs, rhs);
+  *result = dest;
+  return true;
+}
+
+static bool emit_unary(struct IrGenerator* gen, const struct AstUnary* ast, struct Temp* result) {
+  struct Temp rhs, dest;
+  if (!emit(gen, ast->rhs, false, &rhs)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(rhs)) {
+    return false;
+  }
+  dest = new_temp(gen);
+  write_unary_instr(gen, ast->ast.offset, dest, ast->operation, rhs);
+  *result = dest;
+  return true;
+}
+
+// TODO: Refer to the "environment" to see if we should capture any variables (i.e. is this a closure?)
+static bool emit_identifier(struct IrGenerator* gen, const struct AstIdentifier* ast,
+                            struct Temp* result) {
+  struct Temp dest = new_temp(gen);
+  write_variable_access(gen, ast->ast.offset, dest, ast->identifier);
   *result = dest;
   return true;
 }
@@ -164,7 +214,7 @@ static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_ch
   case AST_Binary:
     return emit_binary(gen, (const struct AstBinary*) ast, result);
   case AST_Unary:
-    UNIMPLEMENTED();
+    return emit_unary(gen, (const struct AstUnary*) ast, result);
     break;
   case AST_Call:
     UNIMPLEMENTED();
@@ -188,7 +238,7 @@ static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_ch
     UNIMPLEMENTED();
     break;
   case AST_Identifier:
-    UNIMPLEMENTED();
+    return emit_identifier(gen, (const struct AstIdentifier*) ast, result);
     break;
   case AST_Float:
     UNIMPLEMENTED();
@@ -258,7 +308,8 @@ static void ir_instr_literal_into_temp_print(const struct IrInstrLiteralIntoTemp
 
 static void ir_instr_var_into_temp_print(const struct IrInstrVarIntoTemp* instr,
                                          struct Writer* writer) {
-  UNIMPLEMENTED();
+  writer->writef(writer, "  t%llu := %.*s\n", instr->destination.i, instr->identifier.length,
+                 (const char*) instr->identifier.data);
 }
 
 static void ir_instr_binary_print(const struct IrInstrBinary* instr, struct Writer* writer) {
@@ -267,7 +318,8 @@ static void ir_instr_binary_print(const struct IrInstrBinary* instr, struct Writ
 }
 
 static void ir_instr_unary_print(const struct IrInstrUnary* instr, struct Writer* writer) {
-  UNIMPLEMENTED();
+  writer->writef(writer, "  t%llu := %s t%llu\n", instr->destination.i,
+                 unary_op_to_str(instr->operation), instr->rhs.i);
 }
 
 void ir_chunk_print(const struct IrChunk *root_chunk, const char *name, struct Writer *writer) {

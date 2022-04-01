@@ -11,18 +11,20 @@
   struct Writer* err_writer = (struct Writer*) file_writer_create(stderr); \
   struct Writer* ast_writer = (struct Writer*) string_writer_create(&ast_buf);
 
-#define TEARDOWN() \
-  ast_free(ast);                                                        \
-  file_writer_free((struct FileWriter*) err_writer);                    \
-  string_writer_free((struct StringWriter*) ast_writer);                \
-  string_fini(&ast_buf);
+#define TEARDOWN() do {                                                 \
+    ast_free(ast);                                                      \
+    file_writer_free((struct FileWriter*) err_writer);                  \
+    string_writer_free((struct StringWriter*) ast_writer);              \
+    string_fini(&ast_buf);                                              \
+  } while (0)
 
-#define COMPARE_TO(TARGET)                                              \
-  ASSERT(ast != NULL);                                                  \
-  ast_print(ast, err_writer);                                           \
-  ast_print(ast, ast_writer);                                           \
-  str_init(&target_str, TARGET, SIZE_MAX);                              \
-  ASSERT_STR_EQ(target_str, ((struct Str) { ast_buf.data, ast_buf.length }));
+#define COMPARE_TO(TARGET) do {                                         \
+    ASSERT(ast != NULL);                                                \
+    ast_print(ast, err_writer);                                         \
+    ast_print(ast, ast_writer);                                         \
+    str_init(&target_str, TARGET, SIZE_MAX);                            \
+    ASSERT_STR_EQ(((struct Str) { ast_buf.data, ast_buf.length }), target_str); \
+  } while (0)
 
 #define E2E_TEST(INPUT, TARGET) do {                               \
     SETUP()                                                        \
@@ -30,7 +32,7 @@
     struct Ast* ast = parse(INPUT, err_writer, &incomplete_input); \
     ASSERT(ast != NULL);                                           \
     ASSERT(!incomplete_input);                                     \
-    COMPARE_TO(TARGET)                                             \
+    COMPARE_TO(TARGET);                                            \
     TEARDOWN();                                                    \
   } while (0)
 
