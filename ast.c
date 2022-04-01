@@ -4,6 +4,7 @@
 
 #include "log.h"
 #include "string.h"
+#include "util.h"
 
 #define REALLOC(PTR, SIZE) do {        \
     if (!(PTR = realloc(PTR, SIZE))) { \
@@ -451,6 +452,7 @@ static struct Ast* ast_break_clone(const struct AstBreak* ast) {
 }
 
 static int ast_break_print(const struct AstBreak* ast, struct Writer* writer) {
+  UNUSED(ast);
   return writer->writef(writer, "(break)");
 }
 
@@ -469,6 +471,7 @@ static struct Ast* ast_continue_clone(const struct AstContinue* ast) {
 }
 
 static int ast_continue_print(const struct AstContinue* ast, struct Writer* writer) {
+  UNUSED(ast);
   return writer->writef(writer, "(continue)");
 }
 
@@ -693,6 +696,7 @@ struct Ast* ast_self_clone(const struct AstSelf* ast) {
 }
 
 static int ast_self_print(const struct AstSelf* ast, struct Writer* writer) {
+  UNUSED(ast);
   return writer->writef(writer, "self");
 }
 
@@ -711,6 +715,7 @@ static struct Ast* ast_varargs_clone(const struct AstVarargs* ast) {
 }
 
 static int ast_varargs_print(const struct AstVarargs* ast, struct Writer* writer) {
+  UNUSED(ast);
   return writer->writef(writer, "varargs");
 }
 
@@ -894,6 +899,7 @@ static struct Ast* ast_true_clone(const struct AstTrue* ast) {
 }
 
 static int ast_true_print(const struct AstTrue* ast, struct Writer* writer) {
+  UNUSED(ast);
   return writer->writef(writer, "true");
 }
 
@@ -912,6 +918,7 @@ static struct Ast* ast_false_clone(const struct AstFalse* ast) {
 }
 
 static int ast_false_print(const struct AstFalse* ast, struct Writer* writer) {
+  UNUSED(ast);
   return writer->writef(writer, "false");
 }
 
@@ -930,6 +937,7 @@ static struct Ast* ast_ellipsis_clone(const struct AstEllipsis* ast) {
 }
 
 static int ast_ellipsis_print(const struct AstEllipsis* ast, struct Writer* writer) {
+  UNUSED(ast);
   return writer->writef(writer, "...");
 }
 
@@ -948,6 +956,7 @@ static struct Ast* ast_nil_clone(const struct AstNil* ast) {
 }
 
 static int ast_nil_print(const struct AstNil* ast, struct Writer* writer) {
+  UNUSED(ast);
   return writer->writef(writer, "nil");
 }
 
@@ -1053,7 +1062,7 @@ struct Ast* ast_clone(const struct Ast* ast) {
 
 void ast_free(struct Ast* ast) {
 #define REDIRECT_FREE(TYPE, NAME) \
-    case AST_##TYPE: return ast_##NAME##_free((struct Ast##TYPE *) ast);
+  case AST_##TYPE: ast_##NAME##_free((struct Ast##TYPE *) ast); break;
 
   if (!ast) {
     return;

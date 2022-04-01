@@ -6,6 +6,8 @@
 
 #define __FILENAME__ (&__FILE__[BS_SOURCE_PATH_SIZE])
 
+#define UNUSED(X) ((void) (X))
+
 struct SourceLine {
   size_t line_number;
   const char* start;  // Start of the source code for the line

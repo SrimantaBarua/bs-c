@@ -47,14 +47,14 @@ static void error_at(struct Parser* parser, const struct Token* token, const cha
 static void error_at_previous(struct Parser* parser, const char *msg, ...) {
   va_list ap;
   va_start(ap, msg);
-  return error_at(parser, &parser->previous, msg, ap);
+  error_at(parser, &parser->previous, msg, ap);
   va_end(ap);
 }
 
 static void error_at_current(struct Parser* parser, const char *msg, ...) {
   va_list ap;
   va_start(ap, msg);
-  return error_at(parser, &parser->current, msg, ap);
+  error_at(parser, &parser->current, msg, ap);
   va_end(ap);
 }
 

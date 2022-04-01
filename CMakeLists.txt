@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.9)
 set(CMAKE_C_STANDARD 11)
 project(bs VERSION 0.1.0 DESCRIPTION "Barua's Scripting language")
 
+# Enable warnings
+if (MSVC)
+  add_compile_options(/W4 /WX)
+else()
+  add_compile_options(-Wall -Wextra -pedantic)
+endif()
+
 # Add a preprocessor definition with the length of the source directory. This
 # is useful for stripping out the prefix in macros.
 string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)

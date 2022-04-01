@@ -1,6 +1,7 @@
 #include "parser.h"
 
 #include "test.h"
+#include "util.h"
 #include "writer.h"
 
 #define SETUP()                                                         \
@@ -35,6 +36,7 @@
 
 #define E2E_INCOMPLETE(INPUT) do {                                 \
     SETUP()                                                        \
+    UNUSED(target_str);                                            \
     bool incomplete_input = false;                                 \
     struct Ast* ast = parse(INPUT, err_writer, &incomplete_input); \
     ASSERT(ast == NULL);                                           \

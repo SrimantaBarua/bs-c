@@ -89,7 +89,7 @@ static void read_all_and_dump_to_stderr(int fd) {
       }
       buf[ret] = '\0';
       fwrite(buf, 1, ret, stderr);
-      if (ret < sizeof(buf) - 1) {
+      if (ret < (ssize_t) sizeof(buf) - 1) {
         // We (probably?) didn't have enough data to read.
         break;
       }
@@ -124,6 +124,9 @@ static void run_all_tests() {
     // Close the stderr file descriptor
     close(test->stderr_fd);
   }
+  fprintf(stderr,
+          "\x1b[1;32m%lu\x1b[0m passed, \x1b[1;31m%lu\x1b[0m failed, out of \x1b[1m%lu\x1b[0m\n",
+          num_success, num_fail, num_tests);
 }
 
 static bool test_name_is(const struct Test* test, const char* name) {
@@ -174,6 +177,7 @@ static void run_debugger(pid_t test_pid, const struct Test* test) {
 #include <fcntl.h>
 #include <sys/syslimits.h>
 
+/*
 // Writes LLDB commands to a tmpfile and returns the path to the file in pathbuf. Note that this
 // assumes that pathbuf has sufficient space (it should be atleast PATH_MAX bytes).
 static void write_lldb_initial_commands(const struct Test* test, char* pathbuf) {
@@ -193,14 +197,16 @@ static void write_lldb_initial_commands(const struct Test* test, char* pathbuf) 
   // Close temporary file
   fclose(tmp);
 }
+*/
 
 // FIXME: This assumes debugger is LLDB, and that it is installed. Allow for more debuggers, and
 // handle LLDB not being installed.
 static void run_debugger(pid_t test_pid, const struct Test* test) {
-  char pidstr[16], tmppath[PATH_MAX];
+  char pidstr[16];
+  //char tmppath[PATH_MAX];
   //write_lldb_initial_commands(test, tmppath);
   fprintf(stderr, "Debugging test: test_fn_%s_%s\n", test->suite_name, test->test_name);
-  ASSERT(snprintf(pidstr, sizeof(pidstr), "%d", test_pid) < sizeof(pidstr));
+  ASSERT(snprintf(pidstr, sizeof(pidstr), "%d", test_pid) < (int) sizeof(pidstr));
   fprintf(stderr, "Command line: lldb  --attach-pid %s\n", pidstr);
   if (execlp("lldb", "lldb", "--attach-pid", pidstr, /*"--source", tmppath,*/ NULL) < 0) {
     ERR_FMT("Failed to run LLDB: %s\n", strerror(errno));

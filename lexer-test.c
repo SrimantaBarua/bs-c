@@ -3,15 +3,6 @@
 #include "string.h"
 #include "test.h"
 
-static struct Token make_token(enum TokenType type, const char* text, size_t offset) {
-  struct Token token = {
-    .offset = offset,
-    .type = type
-  };
-  str_init(&token.text, text, SIZE_MAX);
-  return token;
-}
-
 #define ASSERT_NEXT_IS_TOKEN(TYP, TEXT, OFFSET) do { \
     ASSERT(lexer_tok(&lexer, &token));               \
     ASSERT(token.type == TYP);                       \
