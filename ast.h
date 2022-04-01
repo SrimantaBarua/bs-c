@@ -69,8 +69,7 @@ enum AstType {
   AST_Identifier,
   AST_Float,
   AST_Integer,
-  AST_True,
-  AST_False,
+  AST_Boolean,
   AST_Ellipsis,
   AST_Nil,
 };
@@ -302,14 +301,10 @@ struct AstInteger {
   int64_t i;
 };
 
-// "true" keyword
-struct AstTrue {
+// "true" or "false"
+struct AstBoolean {
   struct Ast ast;
-};
-
-// "false" keyword
-struct AstFalse {
-  struct Ast ast;
+  bool b;
 };
 
 // "..."
@@ -351,8 +346,7 @@ struct Ast* ast_string_create(size_t offset, struct Str str);
 struct Ast* ast_identifier_create(size_t offset, struct Str str);
 struct Ast* ast_float_create(size_t offset, double f);
 struct Ast* ast_integer_create(size_t offset, int64_t i);
-struct Ast* ast_true_create(size_t offset);
-struct Ast* ast_false_create(size_t offset);
+struct Ast* ast_boolean_create(size_t offset, bool b);
 struct Ast* ast_ellipsis_create(size_t offset);
 struct Ast* ast_nil_create(size_t offset);
 

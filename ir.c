@@ -171,6 +171,36 @@ static void write_variable_lvalue(struct IrGenerator* gen, size_t offset, struct
   chunk_push_instr(gen->current_chunk, instruction);
 }
 
+static void write_nil_literal(struct IrGenerator* gen, size_t offset, struct Temp dest) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Literal,
+    .literal = (struct IrInstrLiteral) {
+      .destination = dest,
+      .literal = (struct IrLiteral) {
+        .type = IL_Nil,
+        .b = false
+      }
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_boolean_literal(struct IrGenerator* gen, size_t offset, struct Temp dest, bool b) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Literal,
+    .literal = (struct IrInstrLiteral) {
+      .destination = dest,
+      .literal = (struct IrLiteral) {
+        .type = IL_Boolean,
+        .b = b
+      }
+    }
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
 static void write_integer_literal(struct IrGenerator* gen, size_t offset, struct Temp dest, int64_t i) {
   struct IrInstr instruction = {
     .offset = offset,
@@ -333,6 +363,20 @@ static bool emit_identifier_lvalue(struct IrGenerator* gen, const struct AstIden
   return true;
 }
 
+static bool emit_nil(struct IrGenerator* gen, const struct AstNil* ast, struct Temp* result) {
+  struct Temp dest = new_temp(gen);
+  write_nil_literal(gen, ast->ast.offset, dest);
+  *result = dest;
+  return true;
+}
+
+static bool emit_boolean(struct IrGenerator* gen, const struct AstBoolean* ast, struct Temp* result) {
+  struct Temp dest = new_temp(gen);
+  write_boolean_literal(gen, ast->ast.offset, dest, true);
+  *result = dest;
+  return true;
+}
+
 static bool emit_integer(struct IrGenerator* gen, const struct AstInteger* ast, struct Temp* result) {
   struct Temp dest = new_temp(gen);
   write_integer_literal(gen, ast->ast.offset, dest, ast->i);
@@ -416,20 +460,11 @@ static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_ch
   case AST_Return:
     UNIMPLEMENTED();
     break;
-  case AST_Member:
-    return emit_member(gen, (const struct AstMember*) ast, result);
-    break;
-  case AST_Index:
-    return emit_index(gen, (const struct AstIndex*) ast, result);
-    break;
-  case AST_Assignment:
-    return emit_assignment(gen, (const struct AstAssignment*) ast, result);
-    break;
-  case AST_Binary:
-    return emit_binary(gen, (const struct AstBinary*) ast, result);
-  case AST_Unary:
-    return emit_unary(gen, (const struct AstUnary*) ast, result);
-    break;
+  case AST_Member:     return emit_member(gen, (const struct AstMember*) ast, result);
+  case AST_Index:      return emit_index(gen, (const struct AstIndex*) ast, result);
+  case AST_Assignment: return emit_assignment(gen, (const struct AstAssignment*) ast, result);
+  case AST_Binary:     return emit_binary(gen, (const struct AstBinary*) ast, result);
+  case AST_Unary:      return emit_unary(gen, (const struct AstUnary*) ast, result);
   case AST_Call:
     UNIMPLEMENTED();
     break;
@@ -451,26 +486,16 @@ static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_ch
   case AST_String:
     UNIMPLEMENTED();
     break;
-  case AST_Identifier:
-    return emit_identifier(gen, (const struct AstIdentifier*) ast, result);
-    break;
+  case AST_Identifier: return emit_identifier(gen, (const struct AstIdentifier*) ast, result);
   case AST_Float:
     UNIMPLEMENTED();
     break;
-  case AST_Integer:
-    return emit_integer(gen, (const struct AstInteger*) ast, result);
-  case AST_True:
-    UNIMPLEMENTED();
-    break;
-  case AST_False:
-    UNIMPLEMENTED();
-    break;
+  case AST_Integer:    return emit_integer(gen, (const struct AstInteger*) ast, result);
+  case AST_Boolean:    return emit_boolean(gen, (const struct AstBoolean*) ast, result);
   case AST_Ellipsis:
     UNIMPLEMENTED();
     break;
-  case AST_Nil:
-    UNIMPLEMENTED();
-    break;
+  case AST_Nil:        return emit_nil(gen, (const struct AstNil*) ast, result);
   default:
     UNREACHABLE();
     break;
@@ -499,11 +524,8 @@ static void ir_instr_literal_print(const struct IrInstrLiteral* instr, struct Wr
   case IL_Nil:
     writer->writef(writer, "nil\n");
     break;
-  case IL_True:
-    writer->writef(writer, "true\n");
-    break;
-  case IL_False:
-    writer->writef(writer, "false\n");
+  case IL_Boolean:
+    writer->writef(writer, instr->literal.b ? "true\n" : "false\n");
     break;
   case IL_Integer:
     writer->writef(writer, "%lld\n", instr->literal.i);

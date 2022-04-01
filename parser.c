@@ -284,8 +284,8 @@ static struct Ast* atom(struct Parser* parser) {
   advance(parser);
   switch (parser->previous.type) {
   case TOK_Nil:        return ast_nil_create(offset);
-  case TOK_True:       return ast_true_create(offset);
-  case TOK_False:      return ast_false_create(offset);
+  case TOK_True:       return ast_boolean_create(offset, true);
+  case TOK_False:      return ast_boolean_create(offset, false);
   case TOK_Integer:    return integer(parser);
   case TOK_Float:      return float_node(parser);
   case TOK_Identifier: return ast_identifier_create(offset, parser->previous.text);

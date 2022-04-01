@@ -888,41 +888,23 @@ static void ast_integer_free(struct AstInteger* ast) {
   free(ast);
 }
 
-struct Ast* ast_true_create(size_t offset) {
-  ALLOC_AST(True, true_node, offset);
-  return (struct Ast*) true_node;
+struct Ast* ast_boolean_create(size_t offset, bool b) {
+  ALLOC_AST(Boolean, bool_node, offset);
+  bool_node->b = b;
+  return (struct Ast*) bool_node;
 }
 
-static struct Ast* ast_true_clone(const struct AstTrue* ast) {
-  ALLOC_AST(True, true_node, ast->ast.offset);
-  return (struct Ast*) true_node;
+static struct Ast* ast_boolean_clone(const struct AstBoolean* ast) {
+  ALLOC_AST(Boolean, bool_node, ast->ast.offset);
+  bool_node->b = ast->b;
+  return (struct Ast*) bool_node;
 }
 
-static int ast_true_print(const struct AstTrue* ast, struct Writer* writer) {
-  UNUSED(ast);
-  return writer->writef(writer, "true");
+static int ast_boolean_print(const struct AstBoolean* ast, struct Writer* writer) {
+  return writer->writef(writer, ast->b ? "true" : "false");
 }
 
-static void ast_true_free(struct AstTrue* ast) {
-  free(ast);
-}
-
-struct Ast* ast_false_create(size_t offset) {
-  ALLOC_AST(False, false_node, offset);
-  return (struct Ast*) false_node;
-}
-
-static struct Ast* ast_false_clone(const struct AstFalse* ast) {
-  ALLOC_AST(False, true_node, ast->ast.offset);
-  return (struct Ast*) true_node;
-}
-
-static int ast_false_print(const struct AstFalse* ast, struct Writer* writer) {
-  UNUSED(ast);
-  return writer->writef(writer, "false");
-}
-
-static void ast_false_free(struct AstFalse* ast) {
+static void ast_boolean_free(struct AstBoolean* ast) {
   free(ast);
 }
 
@@ -1003,8 +985,7 @@ int ast_print(const struct Ast* ast, struct Writer* writer) {
   REDIRECT_PRINT(Identifier, identifier)
   REDIRECT_PRINT(Float, float)
   REDIRECT_PRINT(Integer, integer)
-  REDIRECT_PRINT(True, true)
-  REDIRECT_PRINT(False, false)
+  REDIRECT_PRINT(Boolean, boolean)
   REDIRECT_PRINT(Ellipsis, ellipsis)
   REDIRECT_PRINT(Nil, nil)
   default: UNREACHABLE();
@@ -1050,8 +1031,7 @@ struct Ast* ast_clone(const struct Ast* ast) {
   REDIRECT_CLONE(Identifier, identifier)
   REDIRECT_CLONE(Float, float)
   REDIRECT_CLONE(Integer, integer)
-  REDIRECT_CLONE(True, true)
-  REDIRECT_CLONE(False, false)
+  REDIRECT_CLONE(Boolean, boolean)
   REDIRECT_CLONE(Ellipsis, ellipsis)
   REDIRECT_CLONE(Nil, nil)
   default: UNREACHABLE();
@@ -1097,8 +1077,7 @@ void ast_free(struct Ast* ast) {
   REDIRECT_FREE(Identifier, identifier)
   REDIRECT_FREE(Float, float)
   REDIRECT_FREE(Integer, integer)
-  REDIRECT_FREE(True, true)
-  REDIRECT_FREE(False, false)
+  REDIRECT_FREE(Boolean, boolean)
   REDIRECT_FREE(Ellipsis, ellipsis)
   REDIRECT_FREE(Nil, nil)
   default: UNREACHABLE();

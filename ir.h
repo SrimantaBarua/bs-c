@@ -1,6 +1,7 @@
 #ifndef __BS_IR_H__
 #define __BS_IR_H__
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "ast.h"
@@ -14,8 +15,7 @@ struct Temp {
 
 enum IrLiteralType {
   IL_Nil,
-  IL_True,
-  IL_False,
+  IL_Boolean,
   IL_Integer,
   IL_Float,
   IL_String,
@@ -24,6 +24,7 @@ enum IrLiteralType {
 struct IrLiteral {
   enum IrLiteralType type;
   union {
+    bool b;
     int64_t i;
     double f;
     struct Str str;
