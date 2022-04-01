@@ -26,6 +26,12 @@
     exit(1);                                                      \
 } while (0)
 
+#define UNIMPLEMENTED() do {                                        \
+    fprintf(stderr, "ERROR: %s:%d: unimplemented!\n", __FILENAME__, \
+            __LINE__);                                              \
+    exit(1);                                                        \
+} while (0)
+
 #define CHECK(X) do {                  \
     if (!(X)) {                        \
       DIE("Assertion failed: %s", #X); \

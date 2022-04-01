@@ -8,8 +8,9 @@ string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
 add_definitions("-DBS_SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE}")
 
 add_library(bs
-  bs.c
   ast.c
+  bs.c
+  ir.c
   lexer.c
   parser.c
   string.c
