@@ -737,7 +737,7 @@ static struct Ast* ast_array_clone(const struct AstArray* ast) {
 
 static int ast_array_print(const struct AstArray* ast, struct Writer* writer) {
   int ret = 0;
-  TRY_ACCUM(ret, writer->writef(writer, "(arr "));
+  TRY_ACCUM(ret, writer->writef(writer, "(arr"));
   TRY_ACCUM(ret, ast_vec_print(&ast->elements, writer));
   TRY_ACCUM(ret, writer->writef(writer, ")"));
   return ret;
@@ -762,7 +762,7 @@ static struct Ast* ast_set_clone(const struct AstSet* ast) {
 
 static int ast_set_print(const struct AstSet* ast, struct Writer* writer) {
   int ret = 0;
-  TRY_ACCUM(ret, writer->writef(writer, "(set "));
+  TRY_ACCUM(ret, writer->writef(writer, "(set"));
   TRY_ACCUM(ret, ast_vec_print(&ast->elements, writer));
   TRY_ACCUM(ret, writer->writef(writer, ")"));
   return ret;

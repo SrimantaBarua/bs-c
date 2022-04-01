@@ -99,8 +99,8 @@ TEST(Parser, BasicExpressions) {
 }
 
 TEST(Parser, SetDictArr) {
-  E2E_TEST("a ^= b; c /= d; e <<= f; g >>= h;",
-           "(program (= a (^ a b)) (= c (/ c d)) (= e (<< e f)) (= g (>> g h)))");
+  E2E_TEST("{}; {x}; {x : 2}; []; [x];",
+           "(program (dict) (set x) (dict (kvpair x 2)) (arr) (arr x))");
 }
 
 TEST(Parser, Return) {
