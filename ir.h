@@ -13,6 +13,11 @@ struct Temp {
   uint64_t i; // Index of the temporary variable. The variable is named t0, t1, ...
 };
 
+// A placeholder for an offset in the chunk
+struct Label {
+  uint64_t i; // Index of the label
+};
+
 enum IrLiteralType {
   IL_Nil,
   IL_Boolean,
@@ -84,6 +89,15 @@ struct IrInstrCall {
   size_t num_args;
 };
 
+struct IrInstrJumpIfFalse {
+  struct Temp condition;
+  struct Label destination;
+};
+
+struct IrInstrJump {
+  struct Label destination;
+};
+
 // Type of IR instruction
 enum IrInstrType {
   II_Literal,      // Copy the value of a literal to a temporary
@@ -98,6 +112,9 @@ enum IrInstrType {
   II_Assignment,   // Assign to an lvalue
   II_Push,         // Push temporary onto the stack
   II_Call,         // Call a function (temporary) and give number of arguments
+  II_Label,        // A placeholder for an offset in the chunk
+  II_JumpIfFalse,  // Jump to a label if the condition is false
+  II_Jump,         // Unconditionally jump to a label
 };
 
 // A single "instruction" in the (mostly) 3-address-code IR
@@ -105,15 +122,18 @@ struct IrInstr {
   size_t offset;          // Offset into source code
   enum IrInstrType type;  // Type of instruction
   union {
-    struct IrInstrLiteral literal;
-    struct IrInstrVar var;
-    struct IrInstrBinary binary;
-    struct IrInstrUnary unary;
-    struct IrInstrMember member;
-    struct IrInstrIndex index;
-    struct IrInstrAssignment assign;
-    struct IrInstrPush push;
-    struct IrInstrCall call;
+    struct IrInstrLiteral literal;        // Storing a literal in a temporry
+    struct IrInstrVar var;                // Accessing a variable
+    struct IrInstrBinary binary;          // Binary operation
+    struct IrInstrUnary unary;            // Unary operation
+    struct IrInstrMember member;          // Getting a struct member
+    struct IrInstrIndex index;            // Indexing into a collection
+    struct IrInstrAssignment assign;      // Assigning to the lvalue in a temporary
+    struct IrInstrPush push;              // Pushing a value on the stack
+    struct IrInstrCall call;              // Function call
+    struct Label label;                   // Marker for where in the IR the label is
+    struct IrInstrJumpIfFalse cond_jump;  // Jump to the label if the condition is "false-y"
+    struct IrInstrJump jump;              // Unconditionally jump to the label
   };
 };
 

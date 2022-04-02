@@ -14,6 +14,7 @@ struct IrGenerator {
   struct IrChunk* current_chunk; // Chunk we're currently writing to
   struct Writer* writer;         // Where to write error message to
   size_t next_temp;              // Next temporary value to generate
+  size_t next_label;             // Next label to generate
   const char* source;            // The original source code (for error messages)
 };
 
@@ -41,6 +42,11 @@ static struct Temp new_temp(struct IrGenerator* gen) {
   return (struct Temp) { gen->next_temp++ };
 }
 
+// FIXME: This doesn't check for overflow, and assumes label index will never overflow
+static struct Label new_label(struct IrGenerator* gen) {
+  return (struct Label) { gen->next_label++ };
+}
+
 static void chunk_push_instr(struct IrChunk* chunk, struct IrInstr instr) {
   if (chunk->length == chunk->capacity) {
     size_t new_capacity = chunk->capacity == 0 ? 8 : chunk->capacity * 2;
@@ -50,6 +56,39 @@ static void chunk_push_instr(struct IrChunk* chunk, struct IrInstr instr) {
     chunk->capacity = new_capacity;
   }
   chunk->instrs[chunk->length++] = instr;
+}
+
+static void write_label(struct IrGenerator* gen, size_t offset, struct Label label) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Label,
+    .label = label,
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_jump(struct IrGenerator* gen, size_t offset, struct Label label) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Jump,
+    .jump = (struct IrInstrJump) {
+      .destination = label,
+    },
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
+static void write_jump_if_false(struct IrGenerator* gen, size_t offset, struct Temp condition,
+                                struct Label label) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_JumpIfFalse,
+    .cond_jump = (struct IrInstrJumpIfFalse) {
+      .condition = condition,
+      .destination = label,
+    },
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
 }
 
 static void write_member_instr(struct IrGenerator* gen, size_t offset, struct Temp dest,
@@ -247,12 +286,12 @@ static void write_call(struct IrGenerator* gen, size_t offset, struct Temp dest,
 }
 
 // Forward declaration
-static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_chunk, struct Temp* result);
+static bool emit(struct IrGenerator* gen, const struct Ast* ast, struct Temp* result);
 
 static bool emit_program(struct IrGenerator* gen, const struct AstProgram* ast, struct Temp* result) {
   struct Temp dummy;
   for (size_t i = 0; i < ast->statements.length; i++) {
-    if (!emit(gen, ast->statements.data[i], false, &dummy)) {
+    if (!emit(gen, ast->statements.data[i], &dummy)) {
       return false;
     }
   }
@@ -260,9 +299,25 @@ static bool emit_program(struct IrGenerator* gen, const struct AstProgram* ast, 
   return true;
 }
 
+// TODO: Use the environment to resolve locals, (or upvalues for closures)
+static bool emit_block(struct IrGenerator* gen, const struct AstBlock* ast, struct Temp* result) {
+  struct Temp block_result;
+  for (size_t i = 0; i < ast->statements.length; i++) {
+    if (!emit(gen, ast->statements.data[i], &block_result)) {
+      return false;
+    }
+  }
+  if (ast->last_had_semicolon) {
+    *result = INVALID_TEMP;
+  } else {
+    *result = block_result;
+  }
+  return true;
+}
+
 static bool emit_member(struct IrGenerator* gen, const struct AstMember* ast, struct Temp* result) {
   struct Temp lhs, dest;
-  if (!emit(gen, ast->lhs, false, &lhs)) {
+  if (!emit(gen, ast->lhs, &lhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
@@ -276,7 +331,7 @@ static bool emit_member(struct IrGenerator* gen, const struct AstMember* ast, st
 
 static bool emit_member_lvalue(struct IrGenerator* gen, const struct AstMember* ast, struct Temp* result) {
   struct Temp lhs, dest;
-  if (!emit(gen, ast->lhs, false, &lhs)) {
+  if (!emit(gen, ast->lhs, &lhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
@@ -290,13 +345,13 @@ static bool emit_member_lvalue(struct IrGenerator* gen, const struct AstMember* 
 
 static bool emit_index(struct IrGenerator* gen, const struct AstIndex* ast, struct Temp* result) {
   struct Temp lhs, index, dest;
-  if (!emit(gen, ast->lhs, false, &lhs)) {
+  if (!emit(gen, ast->lhs, &lhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
     return false;
   }
-  if (!emit(gen, ast->index, false, &index)) {
+  if (!emit(gen, ast->index, &index)) {
     return false;
   }
   if (TEMP_IS_INVALID(index)) {
@@ -310,13 +365,13 @@ static bool emit_index(struct IrGenerator* gen, const struct AstIndex* ast, stru
 
 static bool emit_index_lvalue(struct IrGenerator* gen, const struct AstIndex* ast, struct Temp* result) {
   struct Temp lhs, index, dest;
-  if (!emit(gen, ast->lhs, false, &lhs)) {
+  if (!emit(gen, ast->lhs, &lhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
     return false;
   }
-  if (!emit(gen, ast->index, false, &index)) {
+  if (!emit(gen, ast->index, &index)) {
     return false;
   }
   if (TEMP_IS_INVALID(index)) {
@@ -330,13 +385,13 @@ static bool emit_index_lvalue(struct IrGenerator* gen, const struct AstIndex* as
 
 static bool emit_binary(struct IrGenerator* gen, const struct AstBinary* ast, struct Temp* result) {
   struct Temp lhs, rhs, dest;
-  if (!emit(gen, ast->lhs, false, &lhs)) {
+  if (!emit(gen, ast->lhs, &lhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
     return false;
   }
-  if (!emit(gen, ast->rhs, false, &rhs)) {
+  if (!emit(gen, ast->rhs, &rhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(rhs)) {
@@ -350,7 +405,7 @@ static bool emit_binary(struct IrGenerator* gen, const struct AstBinary* ast, st
 
 static bool emit_unary(struct IrGenerator* gen, const struct AstUnary* ast, struct Temp* result) {
   struct Temp rhs, dest;
-  if (!emit(gen, ast->rhs, false, &rhs)) {
+  if (!emit(gen, ast->rhs, &rhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(rhs)) {
@@ -405,17 +460,80 @@ static bool emit_call(struct IrGenerator* gen, const struct AstCall* ast, struct
   struct Temp dest, func;
   for (size_t i = 0; i < ast->arguments.length; i++) {
     struct Temp arg;
-    if (!emit(gen, ast->arguments.data[i], false, &arg)) {
+    if (!emit(gen, ast->arguments.data[i], &arg)) {
+      return false;
+    }
+    if (TEMP_IS_INVALID(arg)) {
       return false;
     }
     write_push(gen, ast->ast.offset, arg);
   }
-  if (!emit(gen, ast->function, false, &func)) {
+  if (!emit(gen, ast->function, &func)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(func)) {
     return false;
   }
   dest = new_temp(gen);
   write_call(gen, ast->ast.offset, dest, func, ast->arguments.length);
   *result = dest;
+  return true;
+}
+
+static bool emit_while(struct IrGenerator* gen, const struct AstWhile* ast, struct Temp* result) {
+  struct Label loop_start = new_label(gen);
+  struct Label loop_end = new_label(gen);
+  struct Temp condition, dummy;
+  write_label(gen, ast->ast.offset, loop_start);
+  if (!emit(gen, ast->condition, &condition)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(condition)) {
+    return false;
+  }
+  write_jump_if_false(gen, ast->ast.offset, condition, loop_end);
+  if (!emit(gen, ast->body, &dummy)) {
+    return false;
+  }
+  write_jump(gen, ast->ast.offset, loop_start);
+  write_label(gen, ast->ast.offset, loop_end);
+  *result = INVALID_TEMP;
+  return true;
+}
+
+static bool emit_for(struct IrGenerator* gen, const struct AstFor* ast, struct Temp* result) {
+  struct Temp generator, iterator_ref, iterator, condition, nil, dummy;
+  if (!emit(gen, ast->generator, &generator)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(generator)) {
+    return false;
+  }
+  struct Label loop_start = new_label(gen);
+  struct Label loop_end = new_label(gen);
+  write_label(gen, ast->ast.offset, loop_start);
+  // Temporary to store just "nil"
+  nil = new_temp(gen);
+  write_nil_literal(gen, ast->generator->offset, nil);
+  // Call the generator
+  iterator = new_temp(gen);
+  write_call(gen, ast->generator->offset, iterator, generator, 0);
+  // If the result is nil, jump to the end of the loop
+  condition = new_temp(gen);
+  write_binary_instr(gen, ast->generator->offset, condition, BO_NotEqual, nil, iterator);
+  write_jump_if_false(gen, ast->generator->offset, condition, loop_end);
+  // Store the iterator in the variable.
+  // TODO: this variable needs to be declared, and should only be part of the body's environment.
+  iterator_ref = new_temp(gen);
+  write_variable_lvalue(gen, ast->ast.offset, iterator_ref, ast->identifier);
+  write_assignment_instr(gen, ast->ast.offset, iterator_ref, iterator);
+  // Generate the loop body
+  if (!emit(gen, ast->body, &dummy)) {
+    return false;
+  }
+  write_jump(gen, ast->ast.offset, loop_start);
+  write_label(gen, ast->ast.offset, loop_end);
+  *result = INVALID_TEMP;
   return true;
 }
 
@@ -442,7 +560,7 @@ static bool emit_assignment(struct IrGenerator* gen, const struct AstAssignment*
   if (TEMP_IS_INVALID(lhs)) {
     return false;
   }
-  if (!emit(gen, ast->rhs, false, &rhs)) {
+  if (!emit(gen, ast->rhs, &rhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(rhs)) {
@@ -453,15 +571,10 @@ static bool emit_assignment(struct IrGenerator* gen, const struct AstAssignment*
   return true;
 }
 
-static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_chunk,
-                 struct Temp* result) {
+static bool emit(struct IrGenerator* gen, const struct Ast* ast, struct Temp* result) {
   switch (ast->type) {
-  case AST_Program:
-    CHECK(is_root_chunk);
-    return emit_program(gen, (const struct AstProgram*) ast, result);
-  case AST_Block:
-    UNIMPLEMENTED();
-    break;
+  case AST_Program:    return emit_program(gen, (const struct AstProgram*) ast, result);
+  case AST_Block:      return emit_block(gen, (const struct AstBlock*) ast, result);
   case AST_Struct:
     UNIMPLEMENTED();
     break;
@@ -471,12 +584,8 @@ static bool emit(struct IrGenerator* gen, const struct Ast* ast, bool is_root_ch
   case AST_If:
     UNIMPLEMENTED();
     break;
-  case AST_While:
-    UNIMPLEMENTED();
-    break;
-  case AST_For:
-    UNIMPLEMENTED();
-    break;
+  case AST_While:      return emit_while(gen, (const struct AstWhile*) ast, result);
+  case AST_For:        return emit_for(gen, (const struct AstFor*) ast, result);
   case AST_Let:
     UNIMPLEMENTED();
     break;
@@ -547,8 +656,9 @@ bool ir_generate(const char *source, const struct Ast *ast, struct IrChunk *root
   generator.current_chunk = root_chunk;
   generator.writer = err_writer;
   generator.next_temp = 0;
+  generator.next_label = 0;
   generator.source = source;
-  return emit(&generator, ast, true, &dummy);
+  return emit(&generator, ast, &dummy);
 }
 
 static void ir_instr_literal_print(const struct IrInstrLiteral* instr, struct Writer* writer) {
@@ -625,6 +735,19 @@ static void ir_instr_call_print(const struct IrInstrCall* instr, struct Writer* 
                  instr->num_args);
 }
 
+static void ir_instr_label_print(const struct Label* label, struct Writer* writer) {
+  writer->writef(writer, "L%llu:\n", label->i);
+}
+
+static void ir_instr_jump_if_false_print(const struct IrInstrJumpIfFalse* instr,
+                                         struct Writer* writer) {
+  writer->writef(writer, "  goto L%llu if not t%llu\n", instr->destination.i, instr->condition.i);
+}
+
+static void ir_instr_jump_print(const struct IrInstrJump* instr, struct Writer* writer) {
+  writer->writef(writer, "  goto L%llu\n", instr->destination.i);
+}
+
 void ir_chunk_print(const struct IrChunk *root_chunk, const char *name, struct Writer *writer) {
   writer->writef(writer, "%s:\n", name);
   for (size_t i = 0; i < root_chunk->length; i++) {
@@ -665,6 +788,15 @@ void ir_chunk_print(const struct IrChunk *root_chunk, const char *name, struct W
       break;
     case II_Call:
       ir_instr_call_print(&instr->call, writer);
+      break;
+    case II_Label:
+      ir_instr_label_print(&instr->label, writer);
+      break;
+    case II_JumpIfFalse:
+      ir_instr_jump_if_false_print(&instr->cond_jump, writer);
+      break;
+    case II_Jump:
+      ir_instr_jump_print(&instr->jump, writer);
       break;
     default:
       UNREACHABLE();

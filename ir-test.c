@@ -110,3 +110,48 @@ TEST(Ir, MemberIndexAccess) {
            "  *t12 := t13\n"
            );
 }
+
+TEST(Ir, ForLoop) {
+  E2E_TEST("for i in range(0, 10) { print(i); }",
+           "__main__:\n"
+           "  t0 := 0\n"
+           "  push t0\n"
+           "  t1 := 10\n"
+           "  push t1\n"
+           "  t2 := range\n"
+           "  t3 := t2(2)\n"
+           "L0:\n"
+           "  t4 := nil\n"
+           "  t5 := t3(0)\n"
+           "  t6 := t4 != t5\n"
+           "  goto L1 if not t6\n"
+           "  t7 := &i\n"
+           "  *t7 := t5\n"
+           "  t8 := i\n"
+           "  push t8\n"
+           "  t9 := print\n"
+           "  t10 := t9(1)\n"
+           "  goto L0\n"
+           "L1:\n");
+}
+
+TEST(Ir, WhileLoop) {
+  E2E_TEST("while i < 10 { print(i); i += 1; }",
+           "__main__:\n"
+           "L0:\n"
+           "  t0 := i\n"
+           "  t1 := 10\n"
+           "  t2 := t0 < t1\n"
+           "  goto L1 if not t2\n"
+           "  t3 := i\n"
+           "  push t3\n"
+           "  t4 := print\n"
+           "  t5 := t4(1)\n"
+           "  t6 := &i\n"
+           "  t7 := i\n"
+           "  t8 := 1\n"
+           "  t9 := t7 + t8\n"
+           "  *t6 := t9\n"
+           "  goto L0\n"
+           "L1:\n");
+}
