@@ -1,11 +1,3 @@
-// Local variables should all be on the stack. Whenever a new local variable
-// is created, allocate a stack slot for it, and add it to a map. When someone
-// else (e.g. a lambda) wants to access that function, it'll refer to that
-// stack slot.
-// Alternatively, we can still keep refering to the variable, and have the
-// binding to stack offset be done later
-
-
 #include "ir.h"
 
 #include <stdlib.h>
