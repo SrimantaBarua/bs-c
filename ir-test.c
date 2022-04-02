@@ -73,3 +73,40 @@ TEST(Ir, BasicExpressions) {
            "  t10 := t3 and t9\n"
            );
 }
+
+TEST(Ir, FunctionCall) {
+  E2E_TEST("a = fun(5, c)",
+           "__main__:\n"
+           "  t0 := &a\n"
+           "  t1 := 5\n"
+           "  push t1\n"
+           "  t2 := c\n"
+           "  push t2\n"
+           "  t3 := fun\n"
+           "  t4 := t3(2)\n"
+           "  *t0 := t4\n"
+           );
+}
+
+TEST(Ir, MemberIndexAccess) {
+  E2E_TEST("a = b.c[d]; e[f].g = h; i[j] = k;",
+           "__main__:\n"
+           "  t0 := &a\n"
+           "  t1 := b\n"
+           "  t2 := t1.c\n"
+           "  t3 := d\n"
+           "  t4 := t2[t3]\n"
+           "  *t0 := t4\n"
+           "  t5 := e\n"
+           "  t6 := f\n"
+           "  t7 := t5[t6]\n"
+           "  t8 := &t7.g\n"
+           "  t9 := h\n"
+           "  *t8 := t9\n"
+           "  t10 := i\n"
+           "  t11 := j\n"
+           "  t12 := &t10[t11]\n"
+           "  t13 := k\n"
+           "  *t12 := t13\n"
+           );
+}
