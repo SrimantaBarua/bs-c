@@ -554,16 +554,16 @@ static bool emit_lvalue(struct IrGenerator* gen, const struct Ast* ast, struct T
 
 static bool emit_assignment(struct IrGenerator* gen, const struct AstAssignment* ast, struct Temp* result) {
   struct Temp lhs, rhs;
-  if (!emit_lvalue(gen, ast->lhs, &lhs)) {
-    return false;
-  }
-  if (TEMP_IS_INVALID(lhs)) {
-    return false;
-  }
   if (!emit(gen, ast->rhs, &rhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(rhs)) {
+    return false;
+  }
+  if (!emit_lvalue(gen, ast->lhs, &lhs)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(lhs)) {
     return false;
   }
   write_assignment_instr(gen, ast->ast.offset, lhs, rhs);
