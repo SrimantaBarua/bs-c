@@ -42,7 +42,7 @@ struct IrInstrLiteral {
   struct IrLiteral literal;
 };
 
-// Copy the value of a variable to a temporary
+// Move the value of a variable to a temporary
 struct IrInstrVar {
   struct Temp destination;
   struct Str identifier;
@@ -75,6 +75,11 @@ struct IrInstrIndex {
 };
 
 struct IrInstrAssignment {
+  struct Temp destination;
+  struct Temp source;
+};
+
+struct IrInstrMove {
   struct Temp destination;
   struct Temp source;
 };
@@ -115,6 +120,7 @@ enum IrInstrType {
   II_Label,        // A placeholder for an offset in the chunk
   II_JumpIfFalse,  // Jump to a label if the condition is false
   II_Jump,         // Unconditionally jump to a label
+  II_Move,         // Move the value of a temp to another temp
 };
 
 // A single "instruction" in the (mostly) 3-address-code IR
@@ -134,6 +140,7 @@ struct IrInstr {
     struct Label label;                   // Marker for where in the IR the label is
     struct IrInstrJumpIfFalse cond_jump;  // Jump to the label if the condition is "false-y"
     struct IrInstrJump jump;              // Unconditionally jump to the label
+    struct IrInstrMove move;              // Move the value of one temp to another
   };
 };
 

@@ -91,6 +91,19 @@ static void write_jump_if_false(struct IrGenerator* gen, size_t offset, struct T
   chunk_push_instr(gen->current_chunk, instruction);
 }
 
+static void write_move(struct IrGenerator* gen, size_t offset, struct Temp destination,
+                       struct Temp source) {
+  struct IrInstr instruction = {
+    .offset = offset,
+    .type = II_Move,
+    .move = (struct IrInstrMove) {
+      .destination = destination,
+      .source = source,
+    },
+  };
+  chunk_push_instr(gen->current_chunk, instruction);
+}
+
 static void write_member_instr(struct IrGenerator* gen, size_t offset, struct Temp dest,
                                struct Temp lhs, struct Str member) {
   struct IrInstr instruction = {
@@ -321,6 +334,7 @@ static bool emit_member(struct IrGenerator* gen, const struct AstMember* ast, st
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
+    error(gen, ast->lhs, "expression doesn't generate rvalue: ");
     return false;
   }
   dest = new_temp(gen);
@@ -335,6 +349,7 @@ static bool emit_member_lvalue(struct IrGenerator* gen, const struct AstMember* 
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
+    error(gen, ast->lhs, "expression doesn't generate rvalue: ");
     return false;
   }
   dest = new_temp(gen);
@@ -349,12 +364,14 @@ static bool emit_index(struct IrGenerator* gen, const struct AstIndex* ast, stru
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
+    error(gen, ast->lhs, "expression doesn't generate rvalue: ");
     return false;
   }
   if (!emit(gen, ast->index, &index)) {
     return false;
   }
   if (TEMP_IS_INVALID(index)) {
+    error(gen, ast->index, "expression doesn't generate rvalue: ");
     return false;
   }
   dest = new_temp(gen);
@@ -369,12 +386,14 @@ static bool emit_index_lvalue(struct IrGenerator* gen, const struct AstIndex* as
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
+    error(gen, ast->lhs, "expression doesn't generate rvalue: ");
     return false;
   }
   if (!emit(gen, ast->index, &index)) {
     return false;
   }
   if (TEMP_IS_INVALID(index)) {
+    error(gen, ast->index, "expression doesn't generate rvalue: ");
     return false;
   }
   dest = new_temp(gen);
@@ -389,12 +408,14 @@ static bool emit_binary(struct IrGenerator* gen, const struct AstBinary* ast, st
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
+    error(gen, ast->lhs, "expression doesn't generate rvalue: ");
     return false;
   }
   if (!emit(gen, ast->rhs, &rhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(rhs)) {
+    error(gen, ast->rhs, "expression doesn't generate rvalue: ");
     return false;
   }
   dest = new_temp(gen);
@@ -409,6 +430,7 @@ static bool emit_unary(struct IrGenerator* gen, const struct AstUnary* ast, stru
     return false;
   }
   if (TEMP_IS_INVALID(rhs)) {
+    error(gen, ast->rhs, "expression doesn't generate rvalue: ");
     return false;
   }
   dest = new_temp(gen);
@@ -464,6 +486,7 @@ static bool emit_call(struct IrGenerator* gen, const struct AstCall* ast, struct
       return false;
     }
     if (TEMP_IS_INVALID(arg)) {
+      error(gen, ast->arguments.data[i], "expression doesn't generate rvalue: ");
       return false;
     }
     write_push(gen, ast->ast.offset, arg);
@@ -472,11 +495,54 @@ static bool emit_call(struct IrGenerator* gen, const struct AstCall* ast, struct
     return false;
   }
   if (TEMP_IS_INVALID(func)) {
+    error(gen, ast->function, "expression doesn't generate rvalue: ");
     return false;
   }
   dest = new_temp(gen);
   write_call(gen, ast->ast.offset, dest, func, ast->arguments.length);
   *result = dest;
+  return true;
+}
+
+static bool emit_if(struct IrGenerator* gen, const struct AstIf* ast, struct Temp* result) {
+  struct Temp condition, if_body, else_body, final;
+  struct Label if_end, else_end;
+  if (!emit(gen, ast->condition, &condition)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(condition)) {
+    error(gen, ast->condition, "expression doesn't generate rvalue: ");
+    return false;
+  }
+  if_end = new_label(gen);
+  write_jump_if_false(gen, ast->ast.offset, condition, if_end);
+  if (!emit(gen, ast->body, &if_body)) {
+    return false;
+  }
+  if (!ast->else_part) {
+    write_label(gen, ast->body->offset, if_end);
+    *result = INVALID_TEMP;
+    return true;
+  }
+  final = new_temp(gen);
+  if (TEMP_IS_INVALID(if_body)) {
+    write_nil_literal(gen, ast->body->offset, final);
+  } else {
+    write_move(gen, ast->body->offset, final, if_body);
+  }
+  else_end = new_label(gen);
+  write_jump(gen, ast->else_part->offset, else_end);
+  write_label(gen, ast->else_part->offset, if_end);
+  if (!emit(gen, ast->else_part, &else_body)) {
+    return false;
+  }
+  if (TEMP_IS_INVALID(else_body)) {
+    write_nil_literal(gen, ast->body->offset, final);
+  } else {
+    write_move(gen, ast->body->offset, final, else_body);
+  }
+  write_label(gen, ast->else_part->offset, else_end);
+  *result = final;
   return true;
 }
 
@@ -489,6 +555,7 @@ static bool emit_while(struct IrGenerator* gen, const struct AstWhile* ast, stru
     return false;
   }
   if (TEMP_IS_INVALID(condition)) {
+    error(gen, ast->condition, "expression doesn't generate rvalue: ");
     return false;
   }
   write_jump_if_false(gen, ast->ast.offset, condition, loop_end);
@@ -507,6 +574,7 @@ static bool emit_for(struct IrGenerator* gen, const struct AstFor* ast, struct T
     return false;
   }
   if (TEMP_IS_INVALID(generator)) {
+    error(gen, ast->generator, "expression doesn't generate rvalue: ");
     return false;
   }
   struct Label loop_start = new_label(gen);
@@ -558,12 +626,14 @@ static bool emit_assignment(struct IrGenerator* gen, const struct AstAssignment*
     return false;
   }
   if (TEMP_IS_INVALID(rhs)) {
+    error(gen, ast->rhs, "expression doesn't generate rvalue: ");
     return false;
   }
   if (!emit_lvalue(gen, ast->lhs, &lhs)) {
     return false;
   }
   if (TEMP_IS_INVALID(lhs)) {
+    error(gen, ast->lhs, "expression doesn't generate lvalue: ");
     return false;
   }
   write_assignment_instr(gen, ast->ast.offset, lhs, rhs);
@@ -581,9 +651,7 @@ static bool emit(struct IrGenerator* gen, const struct Ast* ast, struct Temp* re
   case AST_Function:
     UNIMPLEMENTED();
     break;
-  case AST_If:
-    UNIMPLEMENTED();
-    break;
+  case AST_If:         return emit_if(gen, (const struct AstIf*) ast, result);
   case AST_While:      return emit_while(gen, (const struct AstWhile*) ast, result);
   case AST_For:        return emit_for(gen, (const struct AstFor*) ast, result);
   case AST_Let:
@@ -748,6 +816,10 @@ static void ir_instr_jump_print(const struct IrInstrJump* instr, struct Writer* 
   writer->writef(writer, "  goto L%llu\n", instr->destination.i);
 }
 
+static void ir_instr_move_print(const struct IrInstrMove* instr, struct Writer* writer) {
+  writer->writef(writer, "  t%llu := t%llu\n", instr->destination.i, instr->source.i);
+}
+
 void ir_chunk_print(const struct IrChunk *root_chunk, const char *name, struct Writer *writer) {
   writer->writef(writer, "%s:\n", name);
   for (size_t i = 0; i < root_chunk->length; i++) {
@@ -797,6 +869,9 @@ void ir_chunk_print(const struct IrChunk *root_chunk, const char *name, struct W
       break;
     case II_Jump:
       ir_instr_jump_print(&instr->jump, writer);
+      break;
+    case II_Move:
+      ir_instr_move_print(&instr->move, writer);
       break;
     default:
       UNREACHABLE();

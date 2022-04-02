@@ -155,3 +155,55 @@ TEST(Ir, WhileLoop) {
            "  goto L0\n"
            "L1:\n");
 }
+
+TEST(Ir, IfStatement) {
+  E2E_TEST("if a < 1 { 2 } else { 3 }",
+           "__main__:\n"
+           "  t0 := a\n"
+           "  t1 := 1\n"
+           "  t2 := t0 < t1\n"
+           "  goto L0 if not t2\n"
+           "  t3 := 2\n"
+           "  t4 := t3\n"
+           "  goto L1\n"
+           "L0:\n"
+           "  t5 := 3\n"
+           "  t4 := t5\n"
+           "L1:\n");
+  E2E_TEST("if a < 1 { 2 }",
+           "__main__:\n"
+           "  t0 := a\n"
+           "  t1 := 1\n"
+           "  t2 := t0 < t1\n"
+           "  goto L0 if not t2\n"
+           "  t3 := 2\n"
+           "L0:\n");
+  E2E_TEST("ret = if a < 1 { 2 } else { 3 }",
+           "__main__:\n"
+           "  t0 := a\n"
+           "  t1 := 1\n"
+           "  t2 := t0 < t1\n"
+           "  goto L0 if not t2\n"
+           "  t3 := 2\n"
+           "  t4 := t3\n"
+           "  goto L1\n"
+           "L0:\n"
+           "  t5 := 3\n"
+           "  t4 := t5\n"
+           "L1:\n"
+           "  t6 := &ret\n"
+           "  *t6 := t4\n");
+}
+
+TEST_FAIL(Ir, IfWithoutElseRvalue) {
+  E2E_TEST("ret = if a < 1 { 2 }",
+           "__main__:\n"
+           "  t0 := a\n"
+           "  t1 := 1\n"
+           "  t2 := t0 < t1\n"
+           "  goto L0 if not t2\n"
+           "  t3 := 2\n"
+           "L0:\n"
+           "  t4 := &ret\n"
+           "  *t4 := t3\n");
+}
