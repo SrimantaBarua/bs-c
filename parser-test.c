@@ -116,6 +116,22 @@ TEST_FAIL(Parser, MissedSemicolon) {
            "(program (let f1 <private> (fn (params) (block <noret> (let a <private> 2) (return a)))))");
 }
 
+TEST(Parser, EmptyFn) {
+  E2E_TEST("fn f1() { }",
+           "(program (let f1 <private> (fn (params) (block <ret>))))");
+}
+
+TEST_FAIL(Parser, StructInsideBlock) {
+  E2E_TEST("fn f1() { struct A { } }",
+           "(program (let f1 <private> (fn (params) (block <noret> (let A <private> "
+           "(struct (block <noret>)))))))");
+}
+
+TEST_FAIL(Parser, PubLetInsideBlock) {
+  E2E_TEST("fn f1() { pub let a = 2; }",
+           "(program (let f1 <private> (fn (params) (block <noret> (let a <public> 2)))))");
+}
+
 TEST(Parser, Incomplete) {
   E2E_INCOMPLETE("fn f1() {");
 }

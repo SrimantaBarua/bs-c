@@ -17,19 +17,22 @@ bool get_source_line(const char* source, size_t start, size_t length, struct Sou
       ended = true;
     }
     if (source[i] == '\n') {
-      if (ended) {
-        line->length = line_offset;
-        return true;
-      }
       if (started) {
-        line->range_end = line->length = line_offset;
-        return true;
+        break;
       }
       line_number += 1;
       line_offset = 0;
-      continue;
+    } else {
+      line_offset++;
     }
-    line_offset++;
+  }
+  if (ended) {
+    line->length = line_offset;
+    return true;
+  }
+  if (started) {
+    line->range_end = line->length = line_offset;
+    return true;
   }
   return false;
 }

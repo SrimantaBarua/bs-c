@@ -18,6 +18,7 @@ struct Parser {
   bool had_error;        // Whether we had an error while parsing
   bool panic_mode;       // Whether we're in panic mode and need to recover
   bool incomplete_input; // Whether the error was because we had incomplete input
+  bool inside_block;     // Whether we're inside a block statement
 };
 
 // Prints error messages to the parsers "writer", and indicates that we've
@@ -95,7 +96,7 @@ static void consume(struct Parser* parser, enum TokenType type) {
 
 // Forward declarations
 static struct Ast* expression(struct Parser* parser);
-static struct Ast* statement_list(struct Parser* parser, bool inside_block);
+static struct Ast* statement_list(struct Parser* parser);
 static struct Ast* block_statement(struct Parser* parser);
 
 static void expressions(struct Parser* parser, struct AstVec* vec, enum TokenType terminator) {
@@ -587,6 +588,9 @@ static struct Ast* assignment_or_expression(struct Parser* parser) {
 }
 
 static struct Ast* let_declaration(struct Parser* parser, bool public) {
+  if (public && parser->inside_block) {
+    error_at_previous(parser, "public let declaration inside a block: ");
+  }
   size_t offset = parser->current.offset;
   consume(parser, TOK_Let);
   consume(parser, TOK_Identifier);
@@ -601,6 +605,9 @@ static struct Ast* let_declaration(struct Parser* parser, bool public) {
 }
 
 static struct Ast* function_declaration(struct Parser* parser, bool public, bool can_have_self) {
+  if (public && parser->inside_block) {
+    error_at_previous(parser, "public function declaration inside a block: ");
+  }
   struct AstVec params;
   ast_vec_init(&params);
   size_t offset = parser->current.offset;
@@ -615,6 +622,9 @@ static struct Ast* function_declaration(struct Parser* parser, bool public, bool
 }
 
 static struct Ast* struct_declaration(struct Parser* parser, bool public) {
+  if (parser->inside_block) {
+    error_at_current(parser, "struct declaration inside a block: ");
+  }
   struct AstVec members;
   ast_vec_init(&members);
   size_t offset = parser->current.offset;
@@ -660,7 +670,11 @@ static struct Ast* declaration(struct Parser* parser, bool public) {
 }
 
 static struct Ast* block_statement(struct Parser* parser) {
-  return statement_list(parser, true);
+  bool was_inside_block = parser->inside_block;
+  parser->inside_block = true;
+  struct Ast* ret = statement_list(parser);
+  parser->inside_block = was_inside_block;
+  return ret;
 }
 
 static struct Ast* for_statement(struct Parser* parser) {
@@ -713,16 +727,16 @@ static void synchronize(struct Parser* parser) {
   }
 }
 
-static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
+static struct Ast* statement_list(struct Parser* parser) {
   struct AstVec statements;
   bool is_semicolon_statement = false;
   size_t start_offset = parser->current.offset, offset = parser->current.offset;
-  if (inside_block) {
+  if (parser->inside_block) {
     consume(parser, TOK_LeftCurBr);
   }
   ast_vec_init(&statements);
   while (parser->current.type != TOK_EOF) {
-    if (inside_block && parser->current.type == TOK_RightCurBr) {
+    if (parser->inside_block && parser->current.type == TOK_RightCurBr) {
       break;
     }
     is_semicolon_statement = false;
@@ -745,16 +759,25 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
       is_semicolon_statement = true;
       break;
     case TOK_Break:
+      if (!parser->inside_block) {
+        error_at_current(parser, "'break' outside of a block: ");
+      }
       advance(parser);
       ast_vec_push(&statements, ast_break_create(offset));
       is_semicolon_statement = true;
       break;
     case TOK_Continue:
+      if (!parser->inside_block) {
+        error_at_current(parser, "'continue' outside of a block: ");
+      }
       advance(parser);
       ast_vec_push(&statements, ast_continue_create(offset));
       is_semicolon_statement = true;
       break;
     case TOK_Return:
+      if (!parser->inside_block) {
+        error_at_current(parser, "'return' outside of a block: ");
+      }
       advance(parser);
       switch (parser->current.type) {
       case TOK_SemiColon:
@@ -782,7 +805,7 @@ static struct Ast* statement_list(struct Parser* parser, bool inside_block) {
       }
     }
   }
-  if (inside_block) {
+  if (parser->inside_block) {
     consume(parser, TOK_RightCurBr);
     return ast_block_create(start_offset, statements, is_semicolon_statement);
   } else {
@@ -798,13 +821,14 @@ static void parser_init(struct Parser* parser, const char* source, struct Writer
   parser->writer = writer;
   parser->had_error = false;
   parser->panic_mode = false;
+  parser->inside_block = false;
   advance(parser); // Jump-start parsing
 }
 
 struct Ast* parse(const char* source, struct Writer *err_writer, bool* incomplete_input) {
   struct Parser parser;
   parser_init(&parser, source, err_writer);
-  struct Ast* ast = statement_list(&parser, false);
+  struct Ast* ast = statement_list(&parser);
   *incomplete_input = !parser.had_error && parser.incomplete_input;
   // If an error was encountered, free the AST and return NULL
   if (parser.had_error || parser.incomplete_input) {
