@@ -677,15 +677,61 @@ static struct Ast* block_statement(struct Parser* parser) {
   return ret;
 }
 
+// "for" loops are just syntactic sugar for a while loop calling an iterator
+// returned by a generator. For example -
+// Original:
+//   for i in range(0, 10) {
+//     print(i);
+//   }
+// De-sugared:
+//   {
+//     let __iter = generator();
+//     let i = next(__iter);
+//     while (i != nil) {
+//       print(i);
+//       i = next(__iter);
+//     }
+//   }
 static struct Ast* for_statement(struct Parser* parser) {
-  size_t offset = parser->previous.offset;
+  size_t start_offset = parser->previous.offset;
   consume(parser, TOK_For);
   consume(parser, TOK_Identifier);
+  size_t identifier_offset = parser->current.offset;
   struct Str identifier = parser->previous.text;
   consume(parser, TOK_In);
+  size_t generator_offset = parser->current.offset;
   struct Ast* generator = expression(parser);
-  struct Ast* body = block_statement(parser);
-  return ast_for_create(offset, identifier, generator, body);
+  struct AstBlock* body = (struct AstBlock*) block_statement(parser);
+  CHECK(body->ast.type == AST_Block);
+
+  struct AstVec statements, next_args;
+  ast_vec_init(&statements);
+  ast_vec_init(&next_args);
+
+  struct Str iterator = (struct Str) { (const uint8_t*)"__iter", 6 };
+  struct Str next = (struct Str) { (const uint8_t*)"next", 4 };
+  struct Ast* ast_iterator = ast_identifier_create(generator_offset, iterator);
+  struct Ast* ast_identifier = ast_identifier_create(identifier_offset, identifier);
+  struct Ast* ast_next = ast_identifier_create(generator_offset, next);
+
+  ast_vec_push(&next_args, ast_clone(ast_iterator));
+  struct Ast* call_next = ast_call_create(generator_offset, ast_clone(ast_next), next_args);
+
+  // let __iter = generator()
+  ast_vec_push(&statements, ast_let_create(generator_offset, false, iterator, generator));
+  // let identifier = next(__iter)
+  ast_vec_push(&statements, ast_let_create(identifier_offset, false, identifier, ast_clone(call_next)));
+  // identifer != nil
+  struct Ast* condition = ast_binary_create(generator_offset, BO_NotEqual, ast_clone(ast_identifier),
+                                            ast_nil_create(identifier_offset));
+  // identifer = next(__iter)
+  struct Ast* update = ast_assignment_create(generator_offset, ast_identifier, call_next);
+  // Append "update" to the loop body
+  ast_vec_push(&body->statements, update);
+  // Create while loop
+  ast_vec_push(&statements, ast_while_create(start_offset, condition, (struct Ast*) body));
+  // Return enclosing block
+  return ast_block_create(start_offset, statements, true);
 }
 
 static struct Ast* while_statement(struct Parser* parser) {

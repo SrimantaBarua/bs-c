@@ -327,40 +327,6 @@ static void ast_while_free(struct AstWhile* ast) {
   free(ast);
 }
 
-struct Ast* ast_for_create(size_t offset, struct Str identifier, struct Ast* generator, struct Ast* body) {
-  ALLOC_AST(For, for_loop, offset);
-  for_loop->identifier = identifier;
-  for_loop->generator = generator;
-  for_loop->body = body;
-  return (struct Ast*) for_loop;
-}
-
-static struct Ast* ast_for_clone(const struct AstFor* ast) {
-  ALLOC_AST(For, for_loop, ast->ast.offset);
-  for_loop->identifier = ast->identifier;
-  for_loop->generator = ast_clone(ast->generator);
-  for_loop->body = ast_clone(ast->body);
-  return (struct Ast*) for_loop;
-}
-
-static int ast_for_print(const struct AstFor* ast, struct Writer* writer) {
-  int ret = 0;
-  TRY_ACCUM(ret, writer->writef(writer, "(for "));
-  TRY_ACCUM(ret, str_print(&ast->identifier, writer));
-  TRY_ACCUM(ret, writer->writef(writer, " in "));
-  TRY_ACCUM(ret, ast_print(ast->generator, writer));
-  TRY_ACCUM(ret, writer->writef(writer, " "));
-  TRY_ACCUM(ret, ast_print(ast->body, writer));
-  TRY_ACCUM(ret, writer->writef(writer, ")"));
-  return ret;
-}
-
-static void ast_for_free(struct AstFor* ast) {
-  ast_free(ast->generator);
-  ast_free(ast->body);
-  free(ast);
-}
-
 struct Ast* ast_let_create(size_t offset, bool public, struct Str variable, struct Ast* rhs) {
   ALLOC_AST(Let, let, offset);
   let->public = public;
@@ -963,7 +929,6 @@ int ast_print(const struct Ast* ast, struct Writer* writer) {
   REDIRECT_PRINT(Function, function)
   REDIRECT_PRINT(If, if)
   REDIRECT_PRINT(While, while)
-  REDIRECT_PRINT(For, for)
   REDIRECT_PRINT(Let, let)
   REDIRECT_PRINT(Require, require)
   REDIRECT_PRINT(Yield, yield)
@@ -1009,7 +974,6 @@ struct Ast* ast_clone(const struct Ast* ast) {
   REDIRECT_CLONE(Function, function)
   REDIRECT_CLONE(If, if)
   REDIRECT_CLONE(While, while)
-  REDIRECT_CLONE(For, for)
   REDIRECT_CLONE(Let, let)
   REDIRECT_CLONE(Require, require)
   REDIRECT_CLONE(Yield, yield)
@@ -1055,7 +1019,6 @@ void ast_free(struct Ast* ast) {
   REDIRECT_FREE(Function, function)
   REDIRECT_FREE(If, if)
   REDIRECT_FREE(While, while)
-  REDIRECT_FREE(For, for)
   REDIRECT_FREE(Let, let)
   REDIRECT_FREE(Require, require)
   REDIRECT_FREE(Yield, yield)

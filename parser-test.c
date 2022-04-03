@@ -53,7 +53,9 @@ TEST(Parser, SimpleIfElse) {
 
 TEST(Parser, SimpleForLoop) {
   E2E_TEST("for i in range(10) { print(i); }",
-           "(program (for i in (call range 10) (block <noret> (call print i))))");
+           "(program (block <noret> (let __iter <private> (call range 10)) (let i <private> "
+           "(call next __iter)) (while (!= i nil) (block <noret> (call print i) "
+           "(= i (call next __iter))))))");
 }
 
 TEST(Parser, FibonacciFunction) {

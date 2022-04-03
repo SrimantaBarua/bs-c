@@ -47,7 +47,6 @@ enum AstType {
   AST_Function,
   AST_If,
   AST_While,
-  AST_For,
   AST_Let,
   AST_Require,
   AST_Yield,
@@ -138,14 +137,6 @@ struct AstWhile {
   struct Ast ast;
   struct Ast* condition; // Loop condition
   struct Ast* body;      // Loop body (block statement)
-};
-
-// For loop
-struct AstFor {
-  struct Ast ast;
-  struct Str identifier; // The iterator
-  struct Ast* generator; // Generator/iterator function
-  struct Ast* body;      // Loop body
 };
 
 // "let" declarations
@@ -324,7 +315,6 @@ struct Ast* ast_struct_create(size_t offset, const struct Str* opt_parent, struc
 struct Ast* ast_function_create(size_t offset, struct AstVec parameters, struct Ast* body);
 struct Ast* ast_if_create(size_t offset, struct Ast* condition, struct Ast* body, struct Ast* else_part);
 struct Ast* ast_while_create(size_t offset, struct Ast* condition, struct Ast* body);
-struct Ast* ast_for_create(size_t offset, struct Str identifier, struct Ast* generator, struct Ast* body);
 struct Ast* ast_let_create(size_t offset, bool public, struct Str variable, struct Ast* rhs);
 struct Ast* ast_require_create(size_t offset, struct Str module);
 struct Ast* ast_yield_create(size_t offset, struct Ast* value);

@@ -568,43 +568,6 @@ static bool emit_while(struct IrGenerator* gen, const struct AstWhile* ast, stru
   return true;
 }
 
-static bool emit_for(struct IrGenerator* gen, const struct AstFor* ast, struct Temp* result) {
-  struct Temp generator, iterator_ref, iterator, condition, nil, dummy;
-  if (!emit(gen, ast->generator, &generator)) {
-    return false;
-  }
-  if (TEMP_IS_INVALID(generator)) {
-    error(gen, ast->generator, "expression doesn't generate rvalue: ");
-    return false;
-  }
-  struct Label loop_start = new_label(gen);
-  struct Label loop_end = new_label(gen);
-  write_label(gen, ast->ast.offset, loop_start);
-  // Temporary to store just "nil"
-  nil = new_temp(gen);
-  write_nil_literal(gen, ast->generator->offset, nil);
-  // Call the generator
-  iterator = new_temp(gen);
-  write_call(gen, ast->generator->offset, iterator, generator, 0);
-  // If the result is nil, jump to the end of the loop
-  condition = new_temp(gen);
-  write_binary_instr(gen, ast->generator->offset, condition, BO_NotEqual, nil, iterator);
-  write_jump_if_false(gen, ast->generator->offset, condition, loop_end);
-  // Store the iterator in the variable.
-  // TODO: this variable needs to be declared, and should only be part of the body's environment.
-  iterator_ref = new_temp(gen);
-  write_variable_lvalue(gen, ast->ast.offset, iterator_ref, ast->identifier);
-  write_assignment_instr(gen, ast->ast.offset, iterator_ref, iterator);
-  // Generate the loop body
-  if (!emit(gen, ast->body, &dummy)) {
-    return false;
-  }
-  write_jump(gen, ast->ast.offset, loop_start);
-  write_label(gen, ast->ast.offset, loop_end);
-  *result = INVALID_TEMP;
-  return true;
-}
-
 static bool emit_lvalue(struct IrGenerator* gen, const struct Ast* ast, struct Temp* result) {
   switch (ast->type) {
   case AST_Identifier:
@@ -653,7 +616,6 @@ static bool emit(struct IrGenerator* gen, const struct Ast* ast, struct Temp* re
     break;
   case AST_If:         return emit_if(gen, (const struct AstIf*) ast, result);
   case AST_While:      return emit_while(gen, (const struct AstWhile*) ast, result);
-  case AST_For:        return emit_for(gen, (const struct AstFor*) ast, result);
   case AST_Let:
     UNIMPLEMENTED();
     break;
