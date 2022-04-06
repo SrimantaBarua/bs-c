@@ -17,7 +17,6 @@ add_definitions("-DBS_SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE}")
 add_library(bs
   ast.c
   bs.c
-  ir.c
   lexer.c
   parser.c
   string.c
@@ -30,7 +29,6 @@ target_link_libraries(bsc PRIVATE bs)
 add_executable(tests
   test.c
   ast-test.c
-  ir-test.c
   lexer-test.c
   parser-test.c
   string-test.c
