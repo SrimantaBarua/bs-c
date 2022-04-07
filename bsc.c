@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "bs.h"
+#include "writer.h"
 
 struct LineBuffer {
   char *data;
@@ -54,14 +55,17 @@ static void line_buffer_read(struct LineBuffer* buffer, FILE* stream) {
 }
 
 static int repl() {
+  struct Writer* stderr_writer = (struct Writer*) file_writer_create(stderr);
   struct LineBuffer buffer;
+  struct Bs bs;
   line_buffer_init(&buffer);
+  bs_init(&bs, stderr_writer);
   const char *prompt = ">>>";
   while (true) {
     printf("%s ", prompt);
     fflush(stdout);
     line_buffer_read(&buffer, stdin);
-    enum BsStatus status = bs_interpret(buffer.data);
+    enum BsStatus status = bs_interpret(&bs, buffer.data);
     switch (status) {
     case BS_Ok:
       prompt = ">>>";
@@ -77,6 +81,7 @@ static int repl() {
     }
   }
   line_buffer_fini(&buffer);
+  file_writer_free((struct FileWriter*) stderr_writer);
   return 0;
 }
 

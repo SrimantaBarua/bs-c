@@ -17,9 +17,13 @@ add_definitions("-DBS_SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE}")
 add_library(bs
   ast.c
   bs.c
+  bytecode.c
+  code-gen.c
   lexer.c
+  memory.c
   parser.c
   string.c
+  value.c
   writer.c)
 
 add_executable(bsc bsc.c)

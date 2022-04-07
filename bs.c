@@ -1,22 +1,41 @@
 #include "bs.h"
 
 #include "ast.h"
+#include "bytecode.h"
+#include "code-gen.h"
+#include "memory.h"
 #include "parser.h"
 #include "writer.h"
 
-enum BsStatus bs_interpret(const char *source) {
-  struct Writer* writer = (struct Writer*) file_writer_create(stderr);
+void bs_init(struct Bs* bs, struct Writer* writer) {
+  mem_init(&bs->mem);
+  bs->writer = writer;
+}
+
+void bs_fini(struct Bs* bs) {
+  UNUSED(bs);
+}
+
+enum BsStatus bs_interpret(struct Bs* bs, const char *source) {
   bool incomplete_input = false;
 
-  struct Ast* ast = parse(source, writer, &incomplete_input);
+  struct Ast* ast = parse(source, bs->writer, &incomplete_input);
   if (ast) {
-    ast_print(ast, writer);
-    writer->writef(writer, "\n");
+    ast_print(ast, bs->writer);
+    bs->writer->writef(bs->writer, "\n");
   }
   bool ok = ast != NULL;
 
+  if (ok) {
+    struct Chunk chunk;
+    chunk_init(&chunk, &bs->mem);
+    if (generate_bytecode(ast, &chunk, bs->writer)) {
+      chunk_disassemble(&chunk, "__main__", bs->writer);
+    }
+    chunk_fini(&chunk);
+  }
+
   ast_free(ast);
-  file_writer_free((struct FileWriter*) writer);
 
   if (incomplete_input) {
     return BS_Incomplete;
