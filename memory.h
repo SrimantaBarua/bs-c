@@ -12,6 +12,9 @@ struct Memory {
   size_t mem_used;  // Current amount of memory used for this BS instance
 };
 
+// Initialize memory tracker
+void mem_init(struct Memory* mem);
+
 // Allocate managed memory.
 void* mem_alloc(struct Memory* mem, size_t size, const char *file, int line);
 

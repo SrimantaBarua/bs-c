@@ -20,6 +20,10 @@ void* mem_alloc(struct Memory* mem, size_t size, const char *file, int line) {
   return ptr;
 }
 
+void mem_init(struct Memory* mem) {
+  mem->mem_used = 0;
+}
+
 // Free managed memory.
 void mem_free(struct Memory* mem, void* ptr, size_t size, const char *file, int line) {
   if (size > mem->mem_used) {
@@ -36,7 +40,7 @@ void* mem_realloc(struct Memory* mem, void* ptr, size_t old_size, size_t new_siz
     MEM_DIE("realloc(): old_size > mem->mem_used (%lu > %lu)", old_size, mem->mem_used);
   }
   void* ret = realloc(ptr, new_size);
-  if (!ptr) {
+  if (!ret) {
     MEM_DIE("realloc(): %s", strerror(errno));
   }
   mem->mem_used -= old_size;
