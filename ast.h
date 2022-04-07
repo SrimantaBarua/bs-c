@@ -77,7 +77,7 @@ enum AstType {
 // node has this Base at the start for common properties.
 struct Ast {
   enum AstType type; // Type of AST node
-  size_t offset;     // Offset into the source code for the start of this node
+  size_t line_num;   // Source line number for this AST node
 };
 
 // Growable array of AST pointers
@@ -309,36 +309,36 @@ struct AstNil {
 };
 
 // Functions to create (allocate) and return different ASTs
-struct Ast* ast_program_create(size_t offset, struct AstVec statements);
-struct Ast* ast_block_create(size_t offset, struct AstVec statements, bool last_had_semicolon);
-struct Ast* ast_struct_create(size_t offset, const struct Str* opt_parent, struct Ast* body);
-struct Ast* ast_function_create(size_t offset, struct AstVec parameters, struct Ast* body);
-struct Ast* ast_if_create(size_t offset, struct Ast* condition, struct Ast* body, struct Ast* else_part);
-struct Ast* ast_while_create(size_t offset, struct Ast* condition, struct Ast* body);
-struct Ast* ast_let_create(size_t offset, bool public, struct Str variable, struct Ast* rhs);
-struct Ast* ast_require_create(size_t offset, struct Str module);
-struct Ast* ast_yield_create(size_t offset, struct Ast* value);
-struct Ast* ast_break_create(size_t offset);
-struct Ast* ast_continue_create(size_t offset);
-struct Ast* ast_return_create(size_t offset, struct Ast* value);
-struct Ast* ast_member_create(size_t offset, struct Ast* lhs, struct Str member);
-struct Ast* ast_index_create(size_t offset, struct Ast* lhs, struct Ast* index);
-struct Ast* ast_assignment_create(size_t offset, struct Ast* lhs, struct Ast* rhs);
-struct Ast* ast_binary_create(size_t offset, enum BinaryOp operation, struct Ast* lhs, struct Ast* rhs);
-struct Ast* ast_unary_create(size_t offset, enum UnaryOp operation, struct Ast* rhs);
-struct Ast* ast_call_create(size_t offset, struct Ast* function, struct AstVec arguments);
-struct Ast* ast_self_create(size_t offset);
-struct Ast* ast_varargs_create(size_t offset);
-struct Ast* ast_array_create(size_t offset, struct AstVec elements);
-struct Ast* ast_set_create(size_t offset, struct AstVec elements);
-struct Ast* ast_dictionary_create(size_t offset, struct AstPairVec kvpairs);
-struct Ast* ast_string_create(size_t offset, struct Str str);
-struct Ast* ast_identifier_create(size_t offset, struct Str str);
-struct Ast* ast_float_create(size_t offset, double f);
-struct Ast* ast_integer_create(size_t offset, int64_t i);
-struct Ast* ast_boolean_create(size_t offset, bool b);
-struct Ast* ast_ellipsis_create(size_t offset);
-struct Ast* ast_nil_create(size_t offset);
+struct Ast* ast_program_create(size_t line_num, struct AstVec statements);
+struct Ast* ast_block_create(size_t line_num, struct AstVec statements, bool last_had_semicolon);
+struct Ast* ast_struct_create(size_t line_num, const struct Str* opt_parent, struct Ast* body);
+struct Ast* ast_function_create(size_t line_num, struct AstVec parameters, struct Ast* body);
+struct Ast* ast_if_create(size_t line_num, struct Ast* condition, struct Ast* body, struct Ast* else_part);
+struct Ast* ast_while_create(size_t line_num, struct Ast* condition, struct Ast* body);
+struct Ast* ast_let_create(size_t line_num, bool public, struct Str variable, struct Ast* rhs);
+struct Ast* ast_require_create(size_t line_num, struct Str module);
+struct Ast* ast_yield_create(size_t line_num, struct Ast* value);
+struct Ast* ast_break_create(size_t line_num);
+struct Ast* ast_continue_create(size_t line_num);
+struct Ast* ast_return_create(size_t line_num, struct Ast* value);
+struct Ast* ast_member_create(size_t line_num, struct Ast* lhs, struct Str member);
+struct Ast* ast_index_create(size_t line_num, struct Ast* lhs, struct Ast* index);
+struct Ast* ast_assignment_create(size_t line_num, struct Ast* lhs, struct Ast* rhs);
+struct Ast* ast_binary_create(size_t line_num, enum BinaryOp operation, struct Ast* lhs, struct Ast* rhs);
+struct Ast* ast_unary_create(size_t line_num, enum UnaryOp operation, struct Ast* rhs);
+struct Ast* ast_call_create(size_t line_num, struct Ast* function, struct AstVec arguments);
+struct Ast* ast_self_create(size_t line_num);
+struct Ast* ast_varargs_create(size_t line_num);
+struct Ast* ast_array_create(size_t line_num, struct AstVec elements);
+struct Ast* ast_set_create(size_t line_num, struct AstVec elements);
+struct Ast* ast_dictionary_create(size_t line_num, struct AstPairVec kvpairs);
+struct Ast* ast_string_create(size_t line_num, struct Str str);
+struct Ast* ast_identifier_create(size_t line_num, struct Str str);
+struct Ast* ast_float_create(size_t line_num, double f);
+struct Ast* ast_integer_create(size_t line_num, int64_t i);
+struct Ast* ast_boolean_create(size_t line_num, bool b);
+struct Ast* ast_ellipsis_create(size_t line_num);
+struct Ast* ast_nil_create(size_t line_num);
 
 // Print AST recursively. Return the number of bytes written, and -1 on error.
 int ast_print(const struct Ast* ast, struct Writer* writer);

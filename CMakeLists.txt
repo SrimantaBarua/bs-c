@@ -20,7 +20,6 @@ add_library(bs
   lexer.c
   parser.c
   string.c
-  util.c
   writer.c)
 
 add_executable(bsc bsc.c)
@@ -31,6 +30,5 @@ add_executable(tests
   ast-test.c
   lexer-test.c
   parser-test.c
-  string-test.c
-  util-test.c)
+  string-test.c)
 target_link_libraries(tests PRIVATE bs)

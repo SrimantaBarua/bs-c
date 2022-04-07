@@ -83,13 +83,13 @@ const char* token_type_to_string(enum TokenType token_type) {
 
 void token_init_undefined(struct Token* token) {
   token->type = TOK_Undefined;
-  token->offset = 0;
+  token->line_num = 0;
   str_init(&token->text, " - ", 3);
 }
 
 void lexer_init(struct Lexer* lexer, const char *source) {
   lexer->source = source;
-  lexer->start_offset = lexer->current_offset = 0;
+  lexer->start_offset = lexer->current_offset = lexer->line_num = 0;
 }
 
 static bool is_at_end(const struct Lexer* lexer) {
@@ -124,6 +124,9 @@ static void skip_whitespace_and_comments(struct Lexer* lexer) {
   while (!is_at_end(lexer)) {
     char c = peek(lexer);
     if (isspace(c)) {
+      if (c == '\n') {
+        lexer->line_num++;
+      }
       advance(lexer);
     } else if (c == '/' && peek2(lexer) == '/') {
       advance(lexer);
@@ -147,28 +150,28 @@ static inline size_t tok_len(const struct Lexer* lexer) {
 
 static bool make_invalid_utf8_error(const struct Lexer* lexer, struct Token* token) {
   token->type = TOK_Error;
-  token->offset = lexer->start_offset;
+  token->line_num = lexer->line_num;
   str_init(&token->text, "invalid UTF-8", SIZE_MAX);
   return true;
 }
 
 static bool make_unexpected_char_error(const struct Lexer* lexer, struct Token* token) {
   token->type = TOK_Error;
-  token->offset = lexer->start_offset;
+  token->line_num = lexer->line_num;
   str_init(&token->text, "unexpected character", SIZE_MAX);
   return true;
 }
 
 static bool make_unterminated_string_error(const struct Lexer* lexer, struct Token* token) {
   token->type = TOK_Error;
-  token->offset = lexer->start_offset;
+  token->line_num = lexer->line_num;
   str_init(&token->text, "unterminated string", SIZE_MAX);
   return true;
 }
 
 static bool make_tok(const struct Lexer* lexer, struct Token* token, enum TokenType type) {
   token->type = type;
-  token->offset = lexer->start_offset;
+  token->line_num = lexer->line_num;
   if (!str_init(&token->text, tok_start(lexer), tok_len(lexer))) {
     return make_invalid_utf8_error(lexer, token);
   }
@@ -183,6 +186,8 @@ static bool string(struct Lexer* lexer, struct Token* token) {
         break;
       }
       advance(lexer);
+    } else if (c == '\n') {
+      lexer->line_num++;
     }
   }
   if (is_at_end(lexer)) {
@@ -191,7 +196,7 @@ static bool string(struct Lexer* lexer, struct Token* token) {
   advance(lexer);
   // Need to trim off opening and closing quotes, so we can't use `make_tok`
   token->type = TOK_String;
-  token->offset = lexer->start_offset + 1;
+  token->line_num = lexer->line_num;
   if (!str_init(&token->text, tok_start(lexer) + 1, tok_len(lexer) - 2)) {
     return make_invalid_utf8_error(lexer, token);
   }

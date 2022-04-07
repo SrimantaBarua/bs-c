@@ -88,7 +88,7 @@ const char* token_type_to_string(enum TokenType token_type);
 struct Token {
   enum TokenType type; // Type of token
   struct Str text;     // Slice of input string for the token
-  size_t offset;       // Offset into the input string where the token starts
+  size_t line_num;     // Source line number that token was on
 };
 
 // Initialize something as an "undefined" token
@@ -100,6 +100,7 @@ struct Lexer {
   // Offsets to be used by the next call to `lexer_tok`
   size_t start_offset;
   size_t current_offset;
+  size_t line_num;
 };
 
 // Initialize the lexer with input source code.
