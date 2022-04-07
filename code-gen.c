@@ -50,28 +50,40 @@ static bool emit_binary(struct State* state, const struct AstBinary* ast) {
     return false;
   }
   switch (ast->operation) {
-  case BO_Equal:        UNIMPLEMENTED();
-  case BO_NotEqual:     UNIMPLEMENTED();
-  case BO_LessEqual:    UNIMPLEMENTED();
-  case BO_LessThan:     UNIMPLEMENTED();
-  case BO_GreaterEqual: UNIMPLEMENTED();
-  case BO_GreaterThan:  UNIMPLEMENTED();
-  case BO_ShiftLeft:    UNIMPLEMENTED();
-  case BO_ShiftRight:   UNIMPLEMENTED();
+  case BO_Equal:        chunk_push_byte(state->chunk, OP_Equal); break;
+  case BO_NotEqual:     chunk_push_byte(state->chunk, OP_NotEqual); break;
+  case BO_LessEqual:    chunk_push_byte(state->chunk, OP_LessEqual); break;
+  case BO_LessThan:     chunk_push_byte(state->chunk, OP_LessThan); break;
+  case BO_GreaterEqual: chunk_push_byte(state->chunk, OP_GreaterEqual); break;
+  case BO_GreaterThan:  chunk_push_byte(state->chunk, OP_GreaterThan); break;
+  case BO_ShiftLeft:    chunk_push_byte(state->chunk, OP_ShiftLeft); break;
+  case BO_ShiftRight:   chunk_push_byte(state->chunk, OP_ShiftRight); break;
   case BO_Add:          chunk_push_byte(state->chunk, OP_Add); break;
-  case BO_Subtract:     UNIMPLEMENTED();
-  case BO_Multiply:     UNIMPLEMENTED();
-  case BO_Divide:       UNIMPLEMENTED();
-  case BO_Modulo:       UNIMPLEMENTED();
-  case BO_BitOr:        UNIMPLEMENTED();
-  case BO_BitAnd:       UNIMPLEMENTED();
-  case BO_BitXor:       UNIMPLEMENTED();
-  case BO_LogicalAnd:   UNIMPLEMENTED();
+  case BO_Subtract:     chunk_push_byte(state->chunk, OP_Subtract); break;
+  case BO_Multiply:     chunk_push_byte(state->chunk, OP_Multiply); break;
+  case BO_Divide:       chunk_push_byte(state->chunk, OP_Divide); break;
+  case BO_Modulo:       chunk_push_byte(state->chunk, OP_Modulo); break;
+  case BO_BitOr:        chunk_push_byte(state->chunk, OP_BitOr); break;
+  case BO_BitAnd:       chunk_push_byte(state->chunk, OP_BitAnd); break;
+  case BO_BitXor:       chunk_push_byte(state->chunk, OP_BitXor); break;
+  case BO_LogicalAnd:
     // TODO: Short-circuiting
     UNIMPLEMENTED();
   case BO_LogicalOr:
     // TODO: Short-circuiting
     UNIMPLEMENTED();
+  }
+  return true;
+}
+
+static bool emit_unary(struct State* state, const struct AstUnary* ast) {
+  if (!emit(state, ast->rhs)) {
+    return false;
+  }
+  switch (ast->operation) {
+  case UO_Minus:      chunk_push_byte(state->chunk, OP_Minus); break;
+  case UO_BitNot:     chunk_push_byte(state->chunk, OP_BitNot); break;
+  case UO_LogicalNot: chunk_push_byte(state->chunk, OP_LogicalNot); break;
   }
   return true;
 }
@@ -116,7 +128,7 @@ static bool emit(struct State* state, const struct Ast* ast) {
   case AST_Index:      UNIMPLEMENTED();
   case AST_Assignment: UNIMPLEMENTED();
   case AST_Binary:     return emit_binary(state, (const struct AstBinary*) ast);
-  case AST_Unary:      UNIMPLEMENTED();
+  case AST_Unary:      return emit_unary(state, (const struct AstUnary*) ast);
   case AST_Call:       UNIMPLEMENTED();
   case AST_Self:       UNIMPLEMENTED();
   case AST_Varargs:    UNIMPLEMENTED();

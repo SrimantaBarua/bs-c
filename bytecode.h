@@ -17,7 +17,26 @@ enum OpCode {
   OP_Const2B, // Push 2-byte offset to constant value
   OP_Const4B, // Push 4-byte offset to constant value
   // Binary operations
-  OP_Add,     // Add top 2 values on the stack and push result
+  OP_Equal,
+  OP_NotEqual,
+  OP_LessEqual,
+  OP_LessThan,
+  OP_GreaterEqual,
+  OP_GreaterThan,
+  OP_ShiftLeft,
+  OP_ShiftRight,
+  OP_Add,
+  OP_Subtract,
+  OP_Multiply,
+  OP_Divide,
+  OP_Modulo,
+  OP_BitOr,
+  OP_BitAnd,
+  OP_BitXor,
+  // Unary operations
+  OP_Minus,
+  OP_BitNot,
+  OP_LogicalNot,
 };
 
 struct CodeVec {

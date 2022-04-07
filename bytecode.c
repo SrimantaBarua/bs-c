@@ -107,13 +107,31 @@ static size_t disassemble_instruction(const struct Chunk* chunk, size_t offset,
                                       struct Writer* writer) {
   uint8_t b = chunk->code.code[offset];
   switch (b) {
-  case OP_Nil:     return disassemble_simple_instruction("OP_Nil", writer);
-  case OP_True:    return disassemble_simple_instruction("OP_True", writer);
-  case OP_False:   return disassemble_simple_instruction("OP_False", writer);
-  case OP_Const1B: return disassemble_const1_instruction(chunk, offset, writer);
-  case OP_Const2B: return disassemble_const2_instruction(chunk, offset, writer);
-  case OP_Const4B: return disassemble_const4_instruction(chunk, offset, writer);
-  case OP_Add:     return disassemble_simple_instruction("OP_Add", writer);
+  case OP_Nil:          return disassemble_simple_instruction("OP_Nil", writer);
+  case OP_True:         return disassemble_simple_instruction("OP_True", writer);
+  case OP_False:        return disassemble_simple_instruction("OP_False", writer);
+  case OP_Const1B:      return disassemble_const1_instruction(chunk, offset, writer);
+  case OP_Const2B:      return disassemble_const2_instruction(chunk, offset, writer);
+  case OP_Const4B:      return disassemble_const4_instruction(chunk, offset, writer);
+  case OP_Equal:        return disassemble_simple_instruction("OP_Equal", writer);
+  case OP_NotEqual:     return disassemble_simple_instruction("OP_NotEqual", writer);
+  case OP_LessEqual:    return disassemble_simple_instruction("OP_LessEqual", writer);
+  case OP_LessThan:     return disassemble_simple_instruction("OP_LessThan", writer);
+  case OP_GreaterEqual: return disassemble_simple_instruction("OP_GreaterEqual", writer);
+  case OP_GreaterThan:  return disassemble_simple_instruction("OP_GreaterThan", writer);
+  case OP_ShiftLeft:    return disassemble_simple_instruction("OP_ShiftLeft", writer);
+  case OP_ShiftRight:   return disassemble_simple_instruction("OP_ShiftRight", writer);
+  case OP_Add:          return disassemble_simple_instruction("OP_Add", writer);
+  case OP_Subtract:     return disassemble_simple_instruction("OP_Subtract", writer);
+  case OP_Multiply:     return disassemble_simple_instruction("OP_Multiply", writer);
+  case OP_Divide:       return disassemble_simple_instruction("OP_Divide", writer);
+  case OP_Modulo:       return disassemble_simple_instruction("OP_Modulo", writer);
+  case OP_BitOr:        return disassemble_simple_instruction("OP_BitOr", writer);
+  case OP_BitAnd:       return disassemble_simple_instruction("OP_BitAnd", writer);
+  case OP_BitXor:       return disassemble_simple_instruction("OP_BitXor", writer);
+  case OP_Minus:        return disassemble_simple_instruction("OP_Minus", writer);
+  case OP_BitNot:       return disassemble_simple_instruction("OP_BitNot", writer);
+  case OP_LogicalNot:   return disassemble_simple_instruction("OP_LogicalNot", writer);
   default:
     DIE("unexpected byte: %u", b);
   }
