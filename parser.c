@@ -858,6 +858,7 @@ static void parser_init(struct Parser* parser, const char* source, struct Writer
   parser->had_error = false;
   parser->panic_mode = false;
   parser->inside_block = false;
+  parser->incomplete_input = false;
   advance(parser); // Jump-start parsing
 }
 
